@@ -21,7 +21,8 @@ export async function POST(req: NextRequest) {
     const scriptPath = path.resolve(process.cwd(), 'scripts/tts.py');
 
     // It's important to wrap text in quotes to handle spaces and special characters
-    const command = `python "${scriptPath}" "${text}" "${tempFilePath}"`;
+    const encodedText = Buffer.from(text).toString('base64');
+    const command = `python "${scriptPath}" "${encodedText}" "${tempFilePath}"`;
 
     const { stdout, stderr } = await execPromise(command);
 

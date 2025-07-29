@@ -1,12 +1,29 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+"use client";
+
+"use client";
+
+import { useEffect, useState, useCallback } from 'react';
 import SpeechRecognition, { useSpeechRecognition } from 'react-speech-recognition';
 import { useChat, Message } from '../hooks/useChat';
+import ReactMarkdown from 'react-markdown';
+import { FaMicrophone, FaStopCircle } from 'react-icons/fa';
 
 export default function Home() {
-  const { messages, input, loading, setInput, sendMessage } = useChat();
-  const { transcript, listening, browserSupportsSpeechRecognition } = useSpeechRecognition();
+  const [isCalling, setIsCalling] = useState(false);
+
+  const handleListen = useCallback((listen: boolean) => {
+    if (listen) {
+      SpeechRecognition.startListening({ continuous: true, language: 'vi-VN' });
+    } else {
+      SpeechRecognition.stopListening();
+    }
+  }, []);
+
+  const { transcript, listening, browserSupportsSpeechRecognition, resetTranscript } = useSpeechRecognition();
+  const { messages, input, loading, setInput, sendMessage } = useChat(handleListen, resetTranscript);
+
 
   useEffect(() => {
     setInput(transcript);
@@ -22,18 +39,19 @@ export default function Home() {
     return <span>Trình duyệt không hỗ trợ nhận dạng giọng nói.</span>;
   }
 
-  const handleListen = () => {
-    if (listening) {
-      SpeechRecognition.stopListening();
+  const handleCall = () => {
+    if (isCalling) {
+      setIsCalling(false);
+      handleListen(false);
     } else {
-      SpeechRecognition.startListening({ continuous: true, language: 'vi-VN' });
+      setIsCalling(true);
+      handleListen(true);
     }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     sendMessage(input);
-    setInput('');
   };
 
   return (
@@ -42,7 +60,7 @@ export default function Home() {
         {messages.map((msg, index) => (
           <div key={index} style={{ textAlign: msg.role === 'user' ? 'right' : 'left', marginBottom: '10px' }}>
             <span style={{ background: msg.role === 'user' ? '#dcf8c6' : '#f1f0f0', padding: '8px 12px', borderRadius: '10px', display: 'inline-block' }}>
-              {msg.parts[0].text}
+              <ReactMarkdown>{msg.parts[0].text}</ReactMarkdown>
             </span>
           </div>
         ))}
@@ -56,8 +74,8 @@ export default function Home() {
           style={{ flex: 1, padding: '10px', borderRadius: '5px', border: '1px solid #ccc' }}
           placeholder="Nhập tin nhắn..."
         />
-        <button type="button" onClick={handleListen} style={{ marginLeft: '10px', padding: '10px', borderRadius: '5px', border: '1px solid #ccc' }}>
-          {listening ? 'Dừng' : 'Ghi âm'}
+        <button type="button" onClick={handleCall} style={{ marginLeft: '10px', padding: '10px', borderRadius: '50%', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '24px' }}>
+          {isCalling ? <FaStopCircle color="red" /> : <FaMicrophone />}
         </button>
         <button type="submit" style={{ marginLeft: '10px', padding: '10px', borderRadius: '5px', border: '1px solid #ccc' }}>
           Gửi

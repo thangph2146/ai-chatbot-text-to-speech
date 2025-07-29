@@ -1,16 +1,20 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 export interface Message {
   role: 'user' | 'model';
   parts: { text: string }[];
 }
 
-export const useChat = () => {
+export const useChat = (
+  onListen: (listening: boolean) => void,
+  resetTranscript: () => void
+) => {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const sendMessage = async (messageText: string) => {
+    const sendMessage = async (messageText: string) => {
     if (!messageText.trim()) return;
 
     const userMessage: Message = { role: 'user', parts: [{ text: messageText }] };
@@ -34,6 +38,8 @@ export const useChat = () => {
       const botMessage: Message = { role: 'model', parts: [{ text: data.text }] };
       setMessages((prev) => [...prev, botMessage]);
       speak(data.text);
+      setInput('');
+      resetTranscript();
     } catch (error) {
       console.error('Failed to send message:', error);
       const errorMessage: Message = { role: 'model', parts: [{ text: 'Sorry, something went wrong.' }] };
@@ -43,14 +49,24 @@ export const useChat = () => {
     }
   };
 
-  const speak = async (text: string) => {
+  const stopAudio = () => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
+  };
+
+  const speak = async (text: string, onEnd?: () => void) => {
+    const cleanText = text.replace(/\*\*/g, ''); // Remove markdown bold
+
+    stopAudio();
     try {
       const response = await fetch('/api/tts', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ text: cleanText }),
       });
 
       if (!response.ok) {
@@ -67,14 +83,25 @@ export const useChat = () => {
           'Lỗi chuyển văn bản thành giọng nói. ' + text
         );
         utterance.lang = 'vi-VN';
-        window.speechSynthesis.speak(utterance);
+        utterance.onend = () => {
+        if (onEnd) onEnd();
+      };
+      utterance.onend = () => {
+        if (onEnd) onEnd();
+      };
+      window.speechSynthesis.speak(utterance);
         return;
       }
 
       const audioBlob = await response.blob();
       const audioUrl = URL.createObjectURL(audioBlob);
       const audio = new Audio(audioUrl);
+      audioRef.current = audio;
       audio.play();
+      audio.onended = () => {
+        if (onEnd) onEnd();
+        audioRef.current = null;
+      };
     } catch (error) {
       console.error('Failed to fetch TTS audio:', error);
       // Fallback for network errors
@@ -85,6 +112,12 @@ export const useChat = () => {
       window.speechSynthesis.speak(utterance);
     }
   };
+
+  useEffect(() => {
+    return () => {
+      stopAudio();
+    };
+  }, []);
 
   return {
     messages,
