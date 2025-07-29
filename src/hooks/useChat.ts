@@ -43,9 +43,45 @@ export const useChat = () => {
     }
   };
 
-  const speak = (text: string) => {
-    if (typeof window !== 'undefined' && window.speechSynthesis) {
-      const utterance = new SpeechSynthesisUtterance(text);
+  const speak = async (text: string) => {
+    try {
+      const response = await fetch('/api/tts', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ text }),
+      });
+
+      if (!response.ok) {
+        // Try to get error message from response body
+        try {
+          const errorData = await response.json();
+          console.error('TTS API error:', errorData.error);
+        } catch (e) {
+          console.error('TTS API error: Could not parse error response.');
+        }
+
+        // Fallback to browser's synthesis if the API fails
+        const utterance = new SpeechSynthesisUtterance(
+          'Lỗi chuyển văn bản thành giọng nói. ' + text
+        );
+        utterance.lang = 'vi-VN';
+        window.speechSynthesis.speak(utterance);
+        return;
+      }
+
+      const audioBlob = await response.blob();
+      const audioUrl = URL.createObjectURL(audioBlob);
+      const audio = new Audio(audioUrl);
+      audio.play();
+    } catch (error) {
+      console.error('Failed to fetch TTS audio:', error);
+      // Fallback for network errors
+      const utterance = new SpeechSynthesisUtterance(
+        'Không thể kết nối dịch vụ giọng nói. ' + text
+      );
+      utterance.lang = 'vi-VN';
       window.speechSynthesis.speak(utterance);
     }
   };

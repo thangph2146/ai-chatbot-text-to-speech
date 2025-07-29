@@ -26,7 +26,7 @@ export default function Home() {
     if (listening) {
       SpeechRecognition.stopListening();
     } else {
-      SpeechRecognition.startListening({ continuous: true });
+      SpeechRecognition.startListening({ continuous: true, language: 'vi-VN' });
     }
   };
 
