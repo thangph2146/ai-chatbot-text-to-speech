@@ -10,16 +10,32 @@ export const useChat = (
   resetTranscript: () => void
 ) => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
 
-    const sendMessage = async (messageText: string) => {
+    const sendMessage = async (messageText: string, isCall: boolean = false) => {
     if (!messageText.trim()) return;
 
+    // Hủy request cũ nếu đang có
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+
+    // Dừng audio cũ nếu đang phát
+    stopAudio();
+    
+    // Dừng listening khi bắt đầu xử lý
+    onListen(false);
+
     const userMessage: Message = { role: 'user', parts: [{ text: messageText }] };
-    setMessages((prev) => [...prev, userMessage]);
     setLoading(true);
+
+    // Tạo AbortController mới
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
 
     try {
       const response = await fetch('/api/chat', {
@@ -28,6 +44,7 @@ export const useChat = (
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ history: messages, message: messageText }),
+        signal: abortController.signal,
       });
 
       if (!response.ok) {
@@ -36,27 +53,55 @@ export const useChat = (
 
       const data = await response.json();
       const botMessage: Message = { role: 'model', parts: [{ text: data.text }] };
-      setMessages((prev) => [...prev, botMessage]);
-      speak(data.text);
+      
+      // Chỉ thêm vào messages nếu không bị hủy
+      if (!abortController.signal.aborted) {
+        if (!isCall) {
+          setMessages((prev) => [...prev, userMessage, botMessage]);
+        }
+        speak(data.text, undefined, isCall);
+      }
+      
       setInput('');
-      resetTranscript();
     } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.log('Request was aborted');
+        return;
+      }
+      
       console.error('Failed to send message:', error);
-      const errorMessage: Message = { role: 'model', parts: [{ text: 'Sorry, something went wrong.' }] };
-      setMessages((prev) => [...prev, errorMessage]);
+      if (!isCall && !abortController.signal.aborted) {
+        const errorMessage: Message = { role: 'model', parts: [{ text: 'Xin lỗi, đã có lỗi xảy ra.' }] };
+        setMessages((prev) => [...prev, errorMessage]);
+      }
     } finally {
-      setLoading(false);
+      if (!abortController.signal.aborted) {
+        setLoading(false);
+        abortControllerRef.current = null;
+      }
     }
   };
 
   const stopAudio = () => {
+    // Dừng audio
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current.currentTime = 0;
+      audioRef.current = null;
     }
+    
+    // Hủy request đang chờ
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    
+    // Reset trạng thái
+    setSpeaking(false);
+    setLoading(false);
   };
 
-  const speak = async (text: string, onEnd?: () => void) => {
+  const speak = async (text: string, onEnd?: () => void, autoListen?: boolean) => {
     const cleanText = text.replace(/\*\*/g, ''); // Remove markdown bold
 
     stopAudio();
@@ -84,12 +129,14 @@ export const useChat = (
         );
         utterance.lang = 'vi-VN';
         utterance.onend = () => {
-        if (onEnd) onEnd();
-      };
-      utterance.onend = () => {
-        if (onEnd) onEnd();
-      };
-      window.speechSynthesis.speak(utterance);
+          if (onEnd) onEnd();
+          audioRef.current = null;
+          setSpeaking(false);
+          if (autoListen) {
+            setTimeout(() => onListen(true), 100); // Small delay for better UX
+          }
+        };
+        window.speechSynthesis.speak(utterance);
         return;
       }
 
@@ -98,9 +145,14 @@ export const useChat = (
       const audio = new Audio(audioUrl);
       audioRef.current = audio;
       audio.play();
+      setSpeaking(true);
       audio.onended = () => {
         if (onEnd) onEnd();
         audioRef.current = null;
+        setSpeaking(false);
+        if (autoListen) {
+          setTimeout(() => onListen(true), 100); // Small delay for better UX
+        }
       };
     } catch (error) {
       console.error('Failed to fetch TTS audio:', error);
@@ -109,6 +161,13 @@ export const useChat = (
         'Không thể kết nối dịch vụ giọng nói. ' + text
       );
       utterance.lang = 'vi-VN';
+      utterance.onend = () => {
+        audioRef.current = null;
+        setSpeaking(false);
+        if (autoListen) {
+          setTimeout(() => onListen(true), 100); // Small delay for better UX
+        }
+      };
       window.speechSynthesis.speak(utterance);
     }
   };
@@ -123,7 +182,9 @@ export const useChat = (
     messages,
     input,
     loading,
+    speaking,
     setInput,
     sendMessage,
+    stopAudio,
   };
 };

@@ -1,33 +1,63 @@
 "use client";
 
-"use client";
-
-"use client";
-
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import SpeechRecognition, { useSpeechRecognition } from 'react-speech-recognition';
-import { useChat, Message } from '../hooks/useChat';
+import { useChat } from '../hooks/useChat';
+import { useCall } from '../hooks/useCall';
 import ReactMarkdown from 'react-markdown';
-import { FaMicrophone, FaStopCircle } from 'react-icons/fa';
+import { FaPhoneSlash } from 'react-icons/fa';
+import CallModal from '@/components/CallModal';
+import SoundWave from '@/components/SoundWave';
 
 export default function Home() {
-  const [isCalling, setIsCalling] = useState(false);
-
-  const handleListen = useCallback((listen: boolean) => {
+  const { transcript, listening, browserSupportsSpeechRecognition, resetTranscript } = useSpeechRecognition();
+  
+  // Unified speech recognition handler
+  const handleSpeechRecognition = (listen: boolean) => {
     if (listen) {
       SpeechRecognition.startListening({ continuous: true, language: 'vi-VN' });
     } else {
       SpeechRecognition.stopListening();
     }
-  }, []);
+  };
+  
+  // Regular chat handler
+  const regularChatHandleListen = handleSpeechRecognition;
+  
+  const { messages, input, loading: regularLoading, speaking: regularSpeaking, setInput, sendMessage } = useChat(regularChatHandleListen, resetTranscript);
+  
+  const {
+    isCallActive,
+    callState,
+    isListening: callIsListening,
+    loading: callLoading,
+    speaking: callSpeaking,
+    startCall,
+    endCall,
+    handleListen: callHandleListen,
+    handleTranscriptChange,
+    interruptSpeaking
+  } = useCall();
 
-  const { transcript, listening, browserSupportsSpeechRecognition, resetTranscript } = useSpeechRecognition();
-  const { messages, input, loading, setInput, sendMessage } = useChat(handleListen, resetTranscript);
-
-
+  // Handle transcript changes for call mode
   useEffect(() => {
-    setInput(transcript);
-  }, [transcript, setInput]);
+    if (isCallActive) {
+      handleTranscriptChange(transcript);
+    } else if (transcript && transcript.trim().length > 0) {
+      // Regular chat mode
+      sendMessage(transcript, false);
+      resetTranscript();
+    }
+  }, [transcript, isCallActive, handleTranscriptChange, sendMessage, resetTranscript]);
+
+  // Auto manage speech recognition based on call listening state
+  useEffect(() => {
+    if (isCallActive && callIsListening && !listening) {
+      handleSpeechRecognition(true);
+    } else if (isCallActive && !callIsListening && listening) {
+      handleSpeechRecognition(false);
+    }
+  }, [isCallActive, callIsListening, listening, handleSpeechRecognition]);
 
   const [isClient, setIsClient] = useState(false);
 
@@ -39,48 +69,67 @@ export default function Home() {
     return <span>Trình duyệt không hỗ trợ nhận dạng giọng nói.</span>;
   }
 
-  const handleCall = () => {
-    if (isCalling) {
-      setIsCalling(false);
-      handleListen(false);
-    } else {
-      setIsCalling(true);
-      handleListen(true);
-    }
+  const handleCallButtonClick = () => {
+    startCall();
+  };
+
+  const handleCloseModal = () => {
+    endCall();
+    resetTranscript();
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    sendMessage(input);
+    sendMessage(input, false);
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', maxWidth: '600px', margin: '0 auto', padding: '20px' }}>
-      <div style={{ flex: 1, overflowY: 'auto', marginBottom: '20px', border: '1px solid #ccc', borderRadius: '5px', padding: '10px' }}>
+    <div className="flex flex-col h-screen max-w-2xl mx-auto p-5">
+      <div className="flex-1 overflow-y-auto mb-5 border border-gray-300 rounded-lg p-3">
         {messages.map((msg, index) => (
-          <div key={index} style={{ textAlign: msg.role === 'user' ? 'right' : 'left', marginBottom: '10px' }}>
-            <span style={{ background: msg.role === 'user' ? '#dcf8c6' : '#f1f0f0', padding: '8px 12px', borderRadius: '10px', display: 'inline-block' }}>
+          <div key={index} className={`text-${msg.role === 'user' ? 'right' : 'left'} mb-2.5`}>
+            <span className={`inline-block px-3 py-2 rounded-lg ${msg.role === 'user' ? 'bg-green-200' : 'bg-gray-200'}`}>
               <ReactMarkdown>{msg.parts[0].text}</ReactMarkdown>
             </span>
           </div>
         ))}
-        {loading && <div>Đang tải...</div>}
+        {(regularLoading || callLoading) && (
+          <div className="flex items-center justify-center">
+            <span className="mr-3">Đang tải...</span>
+            <SoundWave type="loading" />
+          </div>
+        )}
+        {!(regularLoading || callLoading) && (regularSpeaking || callSpeaking) && (
+          <div className="flex items-center justify-center">
+            <span className="mr-3">Bot đang trả lời...</span>
+            <SoundWave type="speaking" />
+          </div>
+        )}
       </div>
-      <form onSubmit={handleSubmit} style={{ display: 'flex' }}>
+      <form onSubmit={handleSubmit} className="flex">
         <input
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          style={{ flex: 1, padding: '10px', borderRadius: '5px', border: '1px solid #ccc' }}
+          className="flex-1 p-2.5 rounded-lg border border-gray-300"
           placeholder="Nhập tin nhắn..."
         />
-        <button type="button" onClick={handleCall} style={{ marginLeft: '10px', padding: '10px', borderRadius: '50%', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '24px' }}>
-          {isCalling ? <FaStopCircle color="red" /> : <FaMicrophone />}
-        </button>
-        <button type="submit" style={{ marginLeft: '10px', padding: '10px', borderRadius: '5px', border: '1px solid #ccc' }}>
+        <button type="submit" className="ml-2.5 p-2.5 rounded-lg border border-gray-300">
           Gửi
         </button>
+        <button type="button" onClick={handleCallButtonClick} className="ml-2.5 p-2.5 rounded-full border-none bg-transparent cursor-pointer text-2xl">
+          <FaPhoneSlash className="text-green-500" />
+        </button>
       </form>
+      <CallModal 
+        isOpen={isCallActive} 
+        onClose={handleCloseModal} 
+        listening={callIsListening} 
+        speaking={callState === 'speaking'} 
+        loading={callState === 'processing'}
+        handleListen={callHandleListen} 
+        stopAudio={interruptSpeaking} 
+      />
     </div>
   );
 }
