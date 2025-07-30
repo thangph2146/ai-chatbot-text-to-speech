@@ -1,44 +1,88 @@
-import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
+import handleDifyChat from "@/service/dify/dify-service";
+import { NextApiRequest, NextApiResponse } from "next";
+import { Readable } from "stream";
 
-const MODEL_NAME = 'gemini-2.5-flash';
-
-export async function POST(req: Request) {
-  const { history, message } = await req.json();
-  const apiKey = process.env.GEMINI_API_KEY || '';
-
-  if (!apiKey) {
-    return new Response('API key not found.', { status: 500 });
-  }
-
-  const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: MODEL_NAME });
-
-  const generationConfig = {
-    temperature: 0.9,
-    topK: 1,
-    topP: 1,
-    maxOutputTokens: 2048,
-  };
-
-  const safetySettings = [
-    { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
-    { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
-    { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
-    { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
-  ];
-
-  const chat = model.startChat({
-    generationConfig,
-    safetySettings,
-    history: history,
+// Helper function to adapt Next.js App Router Request to Pages Router NextApiRequest
+async function adaptRequest(req: Request): Promise<NextApiRequest> {
+  const body = await req.json().catch(() => ({}));
+  const headers: { [key: string]: string } = {};
+  req.headers.forEach((value, key) => {
+    headers[key] = value;
   });
 
-  try {
-    const result = await chat.sendMessage(message);
-    const response = result.response;
-    return new Response(JSON.stringify({ text: response.text() }), { status: 200 });
-  } catch (error) {
-    console.error('Error sending message:', error);
-    return new Response('Error processing your request.', { status: 500 });
+  return {
+    method: req.method,
+    body,
+    headers,
+    query: {},
+    cookies: {},
+  } as unknown as NextApiRequest;
+}
+
+export async function POST(req: Request) {
+  const nextReq = await adaptRequest(req);
+
+  // Create a mock response object that we can control
+  const chunks: any[] = [];
+  let headers = {};
+  let statusCode = 200;
+
+  const res: NextApiResponse = {
+    status: (code: number) => {
+      statusCode = code;
+      return res;
+    },
+    json: (data: any) => {
+      chunks.push(Buffer.from(JSON.stringify(data)));
+      headers = { ...headers, "Content-Type": "application/json" };
+    },
+    send: (data: any) => {
+      chunks.push(Buffer.from(data));
+    },
+    setHeader: (name: string, value: string | string[]) => {
+      headers = { ...headers, [name]: value };
+    },
+    getHeader: (name: string) => {
+      return headers[name as keyof typeof headers];
+    },
+    end: () => {
+      // This is where we would signal completion if not streaming
+    },
+    // @ts-ignore
+    pipe: (stream: Readable) => {
+      // For streaming responses, we will handle this differently
+      // The stream will be returned directly in the Response
+    },
+  } as unknown as NextApiResponse;
+
+  // Create a new streamable response
+  const responseStream = new TransformStream();
+  const writer = responseStream.writable.getWriter();
+  const encoder = new TextEncoder();
+
+  // Override pipe to write to our transform stream
+  res.pipe = (stream: Readable) => {
+    stream.on("data", (chunk) => {
+      writer.write(encoder.encode(chunk.toString()));
+    });
+    stream.on("end", () => {
+      writer.close();
+    });
+    return stream;
+  };
+
+  // Call the original handler
+  await handleDifyChat(nextReq, res);
+
+  // Check if the response was a stream
+  if (res.getHeader("Content-Type") === "text/event-stream") {
+    return new Response(responseStream.readable, {
+      status: statusCode,
+      headers,
+    });
   }
+
+  // If not a stream, return a regular response
+  const body = Buffer.concat(chunks);
+  return new Response(body, { status: statusCode, headers });
 }

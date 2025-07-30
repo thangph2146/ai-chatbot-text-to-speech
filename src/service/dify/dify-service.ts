@@ -1,17 +1,14 @@
 // API endpoint để proxy request đến Dify API
 import { NextApiRequest, NextApiResponse } from 'next';
-import { Agent } from 'node:https';
-import { Readable } from 'stream';
-import { ReadableStream } from 'stream/web';
+import fetch from 'node-fetch';
+import { Agent } from 'https';
 
 const getDifyApiBaseUrl = () => process.env.DIFY_API_BASE_URL || 'https://api.dify.ai';
 const getDifyApiKey = () => process.env.DIFY_API_KEY;
 
 export default async function handleDifyChat(req: NextApiRequest, res: NextApiResponse) {
   try {
-    // Lấy thông tin từ request
-    const difyApiBaseUrl = getDifyApiBaseUrl();
-    const difyApiUrl = `${difyApiBaseUrl}/v1/chat-messages`;
+    const difyApiUrl = `${getDifyApiBaseUrl()}/v1/chat-messages`;
     const difyApiKey = getDifyApiKey();
 
     console.log('Sending request to Dify API with key:', difyApiKey ? `${difyApiKey.substring(0, 8)}...` : 'không có');
@@ -19,6 +16,11 @@ export default async function handleDifyChat(req: NextApiRequest, res: NextApiRe
     if (!difyApiKey) {
       return res.status(500).json({ error: 'DIFY_API_KEY chưa được cấu hình' });
     }
+
+    // Create HTTPS agent that ignores SSL certificate errors
+    const httpsAgent = new Agent({
+      rejectUnauthorized: false
+    });
 
     // Chuyển tiếp request đến Dify API với API key từ server
     const response = await fetch(difyApiUrl, {
@@ -28,15 +30,13 @@ export default async function handleDifyChat(req: NextApiRequest, res: NextApiRe
         'Authorization': `Bearer ${difyApiKey}`,
         'Accept': 'text/event-stream'
       },
-      body: JSON.stringify(req.body),
-      // Thêm tùy chọn bỏ qua kiểm tra SSL
-
-      agent: new Agent({
-        rejectUnauthorized: false
+      body: JSON.stringify({
+        ...req.body,
+        response_mode: 'streaming' // Change to streaming mode for SSE response
       }),
-      // Add timeout to prevent hanging requests
+      agent: httpsAgent,
       timeout: 30000 // 30 seconds timeout
-    } as RequestInit & { agent?: Agent });
+    });
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -81,10 +81,7 @@ export default async function handleDifyChat(req: NextApiRequest, res: NextApiRe
     res.setHeader('Connection', 'keep-alive');
 
     // Stream response về client
-
-     if (response.body) {
-       Readable.fromWeb(response.body as ReadableStream).pipe(res);
-     }
+    response.body.pipe(res);
    } catch (error: unknown) {
      console.error('Lỗi khi gọi Dify API:', error);
      
