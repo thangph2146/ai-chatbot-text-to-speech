@@ -4,6 +4,8 @@ import LogViewer from "@/components/LogViewer";
 import { MessageBubble } from "./components/MessageBubble";
 import { ChatInput } from "./components/ChatInput";
 import { ConversationHistory } from "./components/ConversationHistory";
+import { TypingIndicator } from "./components/TypingIndicator";
+import { LoadingMessage } from "./components/LoadingMessage";
 import { FaHistory, FaComments, FaBars, FaTimes } from "react-icons/fa";
 
 const ChatMessage = () => {
@@ -173,43 +175,42 @@ const ChatMessage = () => {
 
         {/* Messages */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-gradient-to-b from-white/50 to-blue-50/30" ref={messagesContainerRef}>
-          {messages.map((msg) => (
-            <MessageBubble
-              key={msg.id}
-              message={{
-                ...msg,
-                status: 'sent'
-              }}
-              onAction={handleMessageAction}
-              isSelected={uiState.selectedMessageId === msg.id}
-              isEditing={uiState.editingMessageId === msg.id}
-              config={{ enableActions: true }}
-            />
-          ))}
+          {messages.map((message) => {
+            const isStreamingMessage = streamingState.isStreaming && 
+              streamingState.currentMessageId === message.id;
+            
+            // Không hiển thị bot message bubble khi đang streaming và chưa có content
+            if (message.role === 'model' && isStreamingMessage && !streamingState.accumulatedContent) {
+              return null;
+            }
+            
+            return (
+              <MessageBubble
+                key={message.id}
+                message={message}
+                isSelected={uiState.selectedMessageId === message.id}
+                isEditing={uiState.editingMessageId === message.id}
+                onAction={handleMessageAction}
+                isStreaming={isStreamingMessage}
+                streamingContent={isStreamingMessage ? streamingState.accumulatedContent : ''}
+              />
+            );
+          })}
+
+          {/* Show typing indicator when AI is responding */}
+          {streamingState.isStreaming && (
+            <TypingIndicator variant="receiving" />
+          )}
           
 
           <div ref={messagesEndRef} />
 
           {loading && (
-            <div className="flex justify-center">
-              <div className="bg-blue-50 border border-blue-200 px-6 py-3 rounded-2xl text-sm text-blue-700 font-medium shadow-sm">
-                <div className="flex items-center gap-3">
-                  <div className="w-4 h-4 border-2 border-blue-700 border-t-transparent rounded-full animate-spin"></div>
-                  Đang gửi tin nhắn...
-                </div>
-              </div>
-            </div>
+            <LoadingMessage type="sending" message="Đang gửi tin nhắn..." />
           )}
 
           {error && (
-            <div className="flex justify-center">
-              <div className="bg-red-50 border border-red-200 text-red-700 px-6 py-3 rounded-2xl text-sm font-medium shadow-sm">
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-red-700 rounded-full"></div>
-                  Lỗi: {error}
-                </div>
-              </div>
-            </div>
+            <LoadingMessage type="error" message={`Lỗi: ${error}`} />
           )}
         </div>
 

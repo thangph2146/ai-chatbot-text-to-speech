@@ -46,11 +46,11 @@ const initialState: MessageState = {
   currentConversationId: null,
   streamingState: {
     isStreaming: false,
+    streamId: null,
     currentMessageId: null,
+    accumulatedContent: "",
     buffer: "",
     error: null,
-    accumulatedContent: "",
-    streamId: null,
     currentChunk: null
   },
   uiState: {
@@ -101,20 +101,9 @@ export const sendMessageWithLogging = createAsyncThunk(
       let messageId = "";
       
       const streamId = `stream_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      dispatch({ type: 'message/startStreaming', payload: { streamId } });
-
-      // Create a placeholder for the bot's message
       const botMessageId = `msg_${Date.now()}`;
-      dispatch({
-        type: 'message/addMessage',
-        payload: {
-          id: botMessageId,
-          role: 'model',
-          parts: [{ text: '' }],
-          timestamp: Date.now(),
-          conversationId: (getState() as { message: MessageState }).message.currentConversationId,
-        }
-      });
+      
+      dispatch({ type: 'message/startStreaming', payload: { streamId, messageId: botMessageId } });
 
       await new Promise<void>((resolve, reject) => {
         callApiRoute.postChatStream(
@@ -239,23 +228,36 @@ const messageSlice = createSlice({
     },
 
     // Streaming state management
-    startStreaming: (state, action: PayloadAction<{ streamId: string }>) => {
+    startStreaming: (state, action: PayloadAction<{ streamId: string; messageId?: string }>) => {
       state.streamingState.isStreaming = true;
       state.streamingState.streamId = action.payload.streamId;
+      state.streamingState.currentMessageId = action.payload.messageId || null;
       state.streamingState.accumulatedContent = "";
       state.streamingState.error = null;
     },
 
     updateStreamingContent: (state, action: PayloadAction<{ messageId: string; content: string }>) => {
       const { messageId, content } = action.payload;
-      const message = state.messages.find(m => m.id === messageId);
-      if (message) {
-        message.parts[0].text += content;
-        state.streamingState.accumulatedContent += content;
+      let message = state.messages.find(m => m.id === messageId);
+      
+      if (!message) {
+        // Tạo bot message placeholder nếu chưa có
+        message = {
+          id: messageId,
+          role: 'model',
+          parts: [{ text: '' }],
+          timestamp: Date.now(),
+          conversationId: state.currentConversationId || undefined,
+          messageId: messageId,
+        };
+        state.messages.push(ensureMessageParts(message));
       }
-    },
+      
+      message.parts[0].text += content;
+       state.streamingState.accumulatedContent += content;
+     },
 
-    stopStreaming: (state, action: PayloadAction<{ messageId: string; finalContent: string }>) => {
+     stopStreaming: (state, action: PayloadAction<{ messageId: string; finalContent: string }>) => {
       const { messageId, finalContent } = action.payload;
       const message = state.messages.find(m => m.id === messageId);
       if (message) {
@@ -331,28 +333,40 @@ const messageSlice = createSlice({
       .addCase(sendMessageWithLogging.pending, (state, action) => {
         state.isLoading = true;
         state.error = null;
+        // Không thêm user message ngay lập tức, chờ đến khi gửi thành công
+      })
+      .addCase(sendMessageWithLogging.fulfilled, (state, action) => {
+        state.isLoading = false;
 
+        // Thêm user message khi gửi thành công
         const userMessage: Message = {
           id: `user_${Date.now()}`,
           role: "user",
           parts: [{ text: action.meta.arg.messageText }],
           timestamp: Date.now(),
-          conversationId: state.currentConversationId || undefined,
+          conversationId: action.payload.conversationId || state.currentConversationId || undefined,
         };
         state.messages.push(ensureMessageParts(userMessage));
-      })
-      .addCase(sendMessageWithLogging.fulfilled, (state, action) => {
-        state.isLoading = false;
 
-        const lastMessage = state.messages[state.messages.length - 1];
-
-        // Finalize the placeholder message
-        if (lastMessage && lastMessage.role === 'model') {
-          lastMessage.parts = [{ text: action.payload.response?.fullMessage || state.streamingState.accumulatedContent }];
-          lastMessage.id = action.payload.messageId || lastMessage.id;
-          lastMessage.conversationId = action.payload.conversationId || undefined;
-          lastMessage.messageId = action.payload.messageId;
-          lastMessage.timestamp = Date.now();
+        // Tạo hoặc cập nhật bot message với nội dung từ streaming
+        const existingBotMessage = state.messages.find(m => m.id === (action.payload.messageId || state.streamingState.currentMessageId));
+        if (existingBotMessage) {
+          // Cập nhật message đã có
+          existingBotMessage.parts = [{ text: action.payload.response?.fullMessage || state.streamingState.accumulatedContent }];
+          existingBotMessage.conversationId = action.payload.conversationId || state.currentConversationId || undefined;
+          existingBotMessage.messageId = action.payload.messageId;
+          existingBotMessage.timestamp = Date.now();
+        } else {
+          // Tạo bot message mới
+          const botMessage: Message = {
+            id: action.payload.messageId || state.streamingState.currentMessageId || `msg_${Date.now()}`,
+            role: "model",
+            parts: [{ text: action.payload.response?.fullMessage || state.streamingState.accumulatedContent }],
+            timestamp: Date.now(),
+            conversationId: action.payload.conversationId || state.currentConversationId || undefined,
+            messageId: action.payload.messageId,
+          };
+          state.messages.push(ensureMessageParts(botMessage));
         }
 
         // Cập nhật conversation ID

@@ -1,10 +1,11 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { Message, MessageAction, MessageBubbleConfig } from '../types';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { MessageActions } from './MessageActions';
 import { MessageStatus } from './MessageStatus';
 import { formatTimestamp } from '../utils/dateUtils';
 import { cn } from '@/app/lib/utils';
+import '../styles/animations.css';
 
 interface MessageBubbleProps {
   message: Message;
@@ -15,6 +16,8 @@ interface MessageBubbleProps {
   onEditSave?: (messageId: string, newContent: string) => void;
   onEditCancel?: () => void;
   className?: string;
+  isStreaming?: boolean;
+  streamingContent?: string;
 }
 
 const defaultConfig: MessageBubbleConfig = {
@@ -35,14 +38,50 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   onEditSave,
   onEditCancel,
   className,
+  isStreaming = false,
+  streamingContent = '',
 }) => {
   const [isHovered, setIsHovered] = useState(false);
   const [editContent, setEditContent] = useState('');
   const [showActions, setShowActions] = useState(false);
+  const [displayedContent, setDisplayedContent] = useState('');
+  const [showCursor, setShowCursor] = useState(true);
   const finalConfig = { ...defaultConfig, ...config };
   const isUser = message.role === 'user';
   const isAssistant = message.role === 'model';
   const isSystem = message.role === 'system';
+
+  // Streaming animation effect
+  useEffect(() => {
+    if (isStreaming && streamingContent && isAssistant) {
+      let index = 0;
+      const interval = setInterval(() => {
+        if (index <= streamingContent.length) {
+          setDisplayedContent(streamingContent.slice(0, index));
+          index++;
+        } else {
+          clearInterval(interval);
+        }
+      }, 30); // Typing speed
+      
+      return () => clearInterval(interval);
+    } else if (!isStreaming) {
+      setDisplayedContent('');
+    }
+  }, [isStreaming, streamingContent, isAssistant]);
+
+  // Cursor blinking effect
+  useEffect(() => {
+    if (isStreaming && isAssistant) {
+      const interval = setInterval(() => {
+        setShowCursor(prev => !prev);
+      }, 500);
+      
+      return () => clearInterval(interval);
+    } else {
+      setShowCursor(false);
+    }
+  }, [isStreaming, isAssistant]);
 
   // Combine all text parts for editing
   const fullText = useMemo(() => {
@@ -119,7 +158,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   );
 
   const containerClasses = cn(
-    'flex mb-6 transition-all duration-200 group/container',
+    'flex mb-6 transition-all duration-200 group/container animate-fade-in-up',
     {
       'justify-end': isUser,
       'justify-start': isAssistant,
@@ -168,30 +207,53 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
             <div className="space-y-3">
               {/* Message Content */}
               <div className="prose prose-sm w-fit max-w-[75vw]">
-                {message.parts && Array.isArray(message.parts) ? message.parts.map((part, index) => (
-                  <div key={index} className="w-fit leading-relaxed">
-                    {part.type === 'markdown' || isAssistant ? (
+                {/* Streaming content for assistant messages */}
+                {isStreaming && isAssistant && streamingContent ? (
+                  <div className="w-fit leading-relaxed relative">
+                    <div className={cn('whitespace-pre-wrap break-words w-fit font-medium leading-relaxed', {
+                      'text-gray-800': isAssistant,
+                    })}>
                       <MarkdownRenderer 
-                        content={part.text || ''}
-                        className={cn({
-                          'prose-invert': isUser,
-                          'prose-blue': isAssistant,
-                        })}
+                        content={displayedContent}
+                        className="prose-blue"
                       />
-                    ) : (
-                      <div className={cn('whitespace-pre-wrap break-words w-fit font-medium leading-relaxed', {
-                        'text-white': isUser,
-                        'text-gray-800': isAssistant,
-                        'text-blue-800': isSystem,
-                      })}>
-                        {part.text || ''}
+                      {/* Streaming cursor */}
+                       <span className={cn(
+                         'inline-block w-0.5 h-5 bg-blue-600 ml-1 streaming-cursor',
+                         showCursor ? 'opacity-100' : 'opacity-0'
+                       )} />
+                    </div>
+                  </div>
+                ) : (
+                  /* Regular message content - chỉ hiển thị khi không streaming hoặc đã có content */
+                  message.parts && Array.isArray(message.parts) && message.parts.some(part => part.text?.trim()) ? message.parts.map((part, index) => (
+                    <div key={index} className="w-fit leading-relaxed">
+                      {part.type === 'markdown' || isAssistant ? (
+                        <MarkdownRenderer 
+                          content={part.text || ''}
+                          className={cn({
+                            'prose-invert': isUser,
+                            'prose-blue': isAssistant,
+                          })}
+                        />
+                      ) : (
+                        <div className={cn('whitespace-pre-wrap break-words w-fit font-medium leading-relaxed', {
+                          'text-white': isUser,
+                          'text-gray-800': isAssistant,
+                          'text-blue-800': isSystem,
+                        })}>
+                          {part.text || ''}
+                        </div>
+                      )}
+                    </div>
+                  )) : (
+                    /* Chỉ hiển thị "Không có nội dung" cho user messages hoặc system messages */
+                    !isAssistant && (
+                      <div className="text-gray-400 italic font-medium">
+                        Không có nội dung
                       </div>
-                    )}
-                  </div>
-                )) : (
-                  <div className="text-gray-400 italic font-medium">
-                    Không có nội dung
-                  </div>
+                    )
+                  )
                 )}
               </div>
 
