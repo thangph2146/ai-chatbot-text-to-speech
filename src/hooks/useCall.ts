@@ -1,3 +1,5 @@
+'use client';
+
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useChat } from './useChat';
 
@@ -148,11 +150,3 @@ export const useCall = () => {
     lastTranscript
   };
 };
-
-// Type definitions for window.SpeechRecognition
-declare global {
-  interface Window {
-    SpeechRecognition: SpeechRecognition;
-    webkitSpeechRecognition: SpeechRecognition;
-  }
-}

@@ -1,3 +1,5 @@
+'use client';
+
 import { createSlice, createAsyncThunk, PayloadAction } from "@reduxjs/toolkit";
 import { callApiRoute } from "@/app/lib/axios/call-api";
 import { addLog } from "./chatLogSlice";

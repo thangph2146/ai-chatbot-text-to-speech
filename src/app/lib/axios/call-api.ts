@@ -1,3 +1,5 @@
+'use client';
+
 import axios from 'axios';
 import { API_ENDPOINTS } from './end-point';
 import { API_BASE_URL, DIFY_API_BASE_URL, DIFY_API_KEY } from './config';
@@ -11,7 +13,7 @@ const api = axios.create({
 
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('authToken'); // Or wherever your token is stored
+    const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null; // Or wherever your token is stored
     if (token) {
       if (config.headers) {
         config.headers.Authorization = `Bearer ${token}`;

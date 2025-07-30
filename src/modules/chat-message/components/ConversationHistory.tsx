@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useState, useCallback, useMemo } from 'react';
 import { Conversation, HistorySort, HistorySortBy, HistorySortOrder } from '../types';
 import { cn } from '@/app/lib/utils';

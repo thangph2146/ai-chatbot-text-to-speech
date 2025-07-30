@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useEffect, useRef } from "react";
 import { useChatMessage } from "./hooks/useChatMessage";
 import LogViewer from "@/components/LogViewer";
@@ -6,9 +8,11 @@ import { ChatInput } from "./components/ChatInput";
 import { ConversationHistory } from "./components/ConversationHistory";
 import { TypingIndicator } from "./components/TypingIndicator";
 import { LoadingMessage } from "./components/LoadingMessage";
-import { FaHistory, FaComments, FaBars, FaTimes } from "react-icons/fa";
+import { FaComments, FaBars, FaTimes } from "react-icons/fa";
+import { useRouter } from "next/navigation";
 
 const ChatMessage = () => {
+  const router = useRouter();
   const {
     messages,
     input,
@@ -159,16 +163,12 @@ const ChatMessage = () => {
           </div>
           <div className="flex gap-3">
             <button
-              onClick={() => setShowLogs(true)}
-              className="flex items-center gap-2 bg-blue-600/80 hover:bg-blue-600 px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 hover:scale-105 shadow-lg"
+              onClick={()=>{
+                router.push('/call-ai');
+              }}
+              className="bg-green-700 hover:bg-green-800 px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 hover:scale-105 shadow-lg"
             >
-              <FaHistory className="w-4 h-4" /> Logs
-            </button>
-            <button
-              onClick={handleClearMessages}
-              className="bg-red-700 hover:bg-red-800 px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 hover:scale-105 shadow-lg"
-            >
-              Xóa tin nhắn
+              Call AI
             </button>
           </div>
         </div>
