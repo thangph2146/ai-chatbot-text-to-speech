@@ -150,7 +150,7 @@ export const useChat = (
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let fullMessage = '';
-      let botMessage: Message = { role: 'model', parts: [{ text: '' }] };
+      const botMessage: Message = { role: 'model', parts: [{ text: '' }] };
 
       // Add user message and an empty bot message to start
       setMessages((prev) => [...prev, userMessage, botMessage]);

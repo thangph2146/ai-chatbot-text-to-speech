@@ -44,12 +44,6 @@ describe('dify-service', () => {
   describe('handleDifyChat', () => {
     it('should handle successful chat request', async () => {
       // Mock successful response
-      const mockResponseData = {
-        answer: 'Hello! How can I help you today?',
-        conversation_id: 'conv-123',
-        message_id: 'msg-456'
-      }
-
       const mockStream = {
         pipe: jest.fn()
       };
@@ -58,7 +52,7 @@ describe('dify-service', () => {
         ok: true,
         status: 200,
         body: mockStream
-      } as any)
+      } as Partial<Response>)
 
       // Call the service
       await handleDifyChat(mockRequest as NextApiRequest, mockResponse as NextApiResponse)

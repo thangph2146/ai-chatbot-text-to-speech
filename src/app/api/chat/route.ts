@@ -1,7 +1,6 @@
 import logger from "@/app/lib/logger";
 import handleDifyChat from "@/service/dify/dify-service";
 import { NextApiRequest, NextApiResponse } from "next";
-import { Readable } from "stream";
 
 // Helper function to adapt Next.js App Router Request to Pages Router NextApiRequest
 async function adaptRequest(req: Request): Promise<NextApiRequest> {
@@ -25,8 +24,8 @@ export async function POST(req: Request) {
   const nextReq = await adaptRequest(req);
 
   // Create a mock response object that we can control
-  const chunks: any[] = [];
-  let headers = {};
+  const chunks: Buffer[] = [];
+  let headers: Record<string, string | string[]> = {};
   let statusCode = 200;
 
   const res: NextApiResponse = {
@@ -34,12 +33,12 @@ export async function POST(req: Request) {
       statusCode = code;
       return res;
     },
-    json: (data: any) => {
+    json: (data: unknown) => {
       chunks.push(Buffer.from(JSON.stringify(data)));
       headers = { ...headers, "Content-Type": "application/json" };
     },
-    send: (data: any) => {
-      chunks.push(Buffer.from(data));
+    send: (data: unknown) => {
+      chunks.push(Buffer.from(String(data)));
     },
     setHeader: (name: string, value: string | string[]) => {
       headers = { ...headers, [name]: value };
@@ -50,8 +49,7 @@ export async function POST(req: Request) {
     end: () => {
       // This is where we would signal completion if not streaming
     },
-    // @ts-ignore
-    pipe: (stream: Readable) => {
+    pipe: () => {
       // For streaming responses, we will handle this differently
       // The stream will be returned directly in the Response
     },
@@ -59,18 +57,11 @@ export async function POST(req: Request) {
 
   // Create a new streamable response
   const responseStream = new TransformStream();
-  const writer = responseStream.writable.getWriter();
-  const encoder = new TextEncoder();
 
   // Override pipe to write to our transform stream
-  res.pipe = (stream: Readable) => {
-    stream.on("data", (chunk) => {
-      writer.write(encoder.encode(chunk.toString()));
-    });
-    stream.on("end", () => {
-      writer.close();
-    });
-    return stream;
+  res.pipe = <T extends NodeJS.WritableStream>(destination: T) => {
+    // For streaming responses, we handle this differently
+    return destination;
   };
 
   // Call the original handler
@@ -80,11 +71,11 @@ export async function POST(req: Request) {
   if (res.getHeader("Content-Type") === "text/event-stream") {
     return new Response(responseStream.readable, {
       status: statusCode,
-      headers,
+      headers: new Headers(headers as Record<string, string>),
     });
   }
 
   // If not a stream, return a regular response
   const body = Buffer.concat(chunks);
-  return new Response(body, { status: statusCode, headers });
+  return new Response(body, { status: statusCode, headers: new Headers(headers as Record<string, string>) });
 }

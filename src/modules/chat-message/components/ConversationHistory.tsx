@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo } from 'react';
-import { Conversation, HistoryFilter, HistorySort, HistorySortBy, HistorySortOrder } from '../types';
+import { Conversation, HistorySort, HistorySortBy, HistorySortOrder } from '../types';
 import { cn } from '@/app/lib/utils';
 import {
   FaSearch,
@@ -14,7 +14,7 @@ import {
   FaPlus,
   FaSpinner,
 } from 'react-icons/fa';
-import { formatTimestamp, formatRelativeTime } from '../utils/dateUtils';
+import { formatRelativeTime } from '../utils/dateUtils';
 
 interface ConversationHistoryProps {
   conversations: Conversation[];
@@ -42,7 +42,7 @@ export const ConversationHistory: React.FC<ConversationHistoryProps> = ({
   loading = false,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
-  const [filter, setFilter] = useState<HistoryFilter>({});
+
   const [sort, setSort] = useState<HistorySort>({ by: 'lastActivity', order: 'desc' });
   const [showFilters, setShowFilters] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -52,7 +52,7 @@ export const ConversationHistory: React.FC<ConversationHistoryProps> = ({
 
   // Filter and sort conversations
   const filteredAndSortedConversations = useMemo(() => {
-    let filtered = conversations.filter(conv => {
+    const filtered = conversations.filter(conv => {
       // Search filter
       if (searchQuery) {
         const query = searchQuery.toLowerCase();
@@ -61,22 +61,6 @@ export const ConversationHistory: React.FC<ConversationHistoryProps> = ({
           msg.parts.some(part => part.text.toLowerCase().includes(query))
         );
         if (!titleMatch && !messageMatch) return false;
-      }
-
-      // Date range filter
-      if (filter.dateRange) {
-        const convDate = new Date(conv.updatedAt);
-        if (convDate < filter.dateRange.start || convDate > filter.dateRange.end) {
-          return false;
-        }
-      }
-
-      // Tags filter
-      if (filter.tags && filter.tags.length > 0) {
-        const convTags = conv.metadata?.tags || [];
-        if (!filter.tags.some(tag => convTags.includes(tag))) {
-          return false;
-        }
       }
 
       return true;
@@ -110,7 +94,7 @@ export const ConversationHistory: React.FC<ConversationHistoryProps> = ({
     const unpinned = filtered.filter(conv => !conv.metadata?.pinned);
     
     return [...pinned, ...unpinned];
-  }, [conversations, searchQuery, filter, sort]);
+  }, [conversations, searchQuery, sort]);
 
   const handleEditStart = useCallback((conversation: Conversation) => {
     setEditingId(conversation.id);
@@ -130,12 +114,7 @@ export const ConversationHistory: React.FC<ConversationHistoryProps> = ({
     setEditingTitle('');
   }, []);
 
-  const handleSortChange = useCallback((newSortBy: HistorySortBy) => {
-    setSort(prev => ({
-      by: newSortBy,
-      order: prev.by === newSortBy && prev.order === 'desc' ? 'asc' : 'desc',
-    }));
-  }, []);
+
 
   const handleBulkAction = useCallback((action: 'delete' | 'archive') => {
     selectedConversations.forEach(id => {
@@ -172,15 +151,16 @@ export const ConversationHistory: React.FC<ConversationHistoryProps> = ({
       <div
         key={conversation.id}
         className={cn(
-          'group relative p-3 border-b border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer',
+          'group relative mx-2 mb-2 p-4 rounded-lg transition-all duration-200 cursor-pointer border',
           {
-            'bg-blue-100 border-l-4 border-blue-700': isSelected,
-            'opacity-60': isArchived,
+            'bg-blue-700 text-white shadow-md border-blue-700': isSelected,
+            'bg-white hover:bg-gray-50 border-gray-200 hover:border-blue-300': !isSelected && !isArchived,
+            'opacity-50 bg-gray-100 border-gray-200': isArchived,
           }
         )}
         onClick={() => !isEditing && onSelectConversation(conversation.id)}
       >
-        <div className="flex items-start gap-3">
+        <div className="flex items-start gap-4">
           {/* Selection Checkbox */}
           {showBulkActions && (
             <input
@@ -188,20 +168,23 @@ export const ConversationHistory: React.FC<ConversationHistoryProps> = ({
               checked={isChecked}
               onChange={() => toggleConversationSelection(conversation.id)}
               onClick={(e) => e.stopPropagation()}
-              className="mt-1"
+              className="mt-1.5 w-4 h-4 text-blue-700 bg-white border-2 border-gray-300 rounded focus:ring-blue-700 focus:ring-2"
             />
           )}
 
           {/* Pin Indicator */}
           {isPinned && (
-            <FaSpinner className="w-3 h-3 text-yellow-500 mt-1 flex-shrink-0" />
+            <FaSpinner className={cn(
+              'w-4 h-4 mt-1 flex-shrink-0',
+              isSelected ? 'text-yellow-300' : 'text-yellow-500'
+            )} />
           )}
 
           {/* Content */}
           <div className="flex-1 min-w-0">
             {/* Title */}
             {isEditing ? (
-              <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center gap-3" onClick={(e) => e.stopPropagation()}>
                 <input
                   type="text"
                   value={editingTitle}
@@ -210,27 +193,27 @@ export const ConversationHistory: React.FC<ConversationHistoryProps> = ({
                     if (e.key === 'Enter') handleEditSave();
                     if (e.key === 'Escape') handleEditCancel();
                   }}
-                  className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-700 focus:border-blue-700"
                   autoFocus
                 />
                 <button
                   onClick={handleEditSave}
-                  className="text-green-600 hover:text-green-800"
+                  className="p-1.5 rounded-lg bg-blue-700 text-white hover:bg-blue-800 transition-colors"
                 >
                   ✓
                 </button>
                 <button
                   onClick={handleEditCancel}
-                  className="text-red-600 hover:text-red-800"
+                  className="p-1.5 rounded-lg bg-red-700 text-white hover:bg-red-800 transition-colors"
                 >
                   ✕
                 </button>
               </div>
             ) : (
               <h3 className={cn(
-                'font-medium text-sm truncate',
+                'font-semibold text-base truncate',
                 {
-                  'text-blue-900': isSelected,
+                  'text-white': isSelected,
                   'text-gray-900': !isSelected,
                 }
               )}>
@@ -239,23 +222,28 @@ export const ConversationHistory: React.FC<ConversationHistoryProps> = ({
             )}
 
             {/* Metadata */}
-            <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
-              <div className="flex items-center gap-1">
-                <FaComments className="w-3 h-3" />
-                <span>{conversation.messages.length}</span>
+            <div className={cn(
+              'flex items-center gap-4 mt-2 text-sm',
+              isSelected ? 'text-blue-100' : 'text-gray-600'
+            )}>
+              <div className="flex items-center gap-1.5">
+                <FaComments className="w-3.5 h-3.5" />
+                <span className="font-medium">{conversation.messages.length}</span>
               </div>
               
-              <div className="flex items-center gap-1">
-                <FaClock className="w-3 h-3" />
+              <div className="flex items-center gap-1.5">
+                <FaClock className="w-3.5 h-3.5" />
                 <span>{formatRelativeTime(conversation.updatedAt)}</span>
               </div>
 
               {conversation.metadata?.tags && conversation.metadata.tags.length > 0 && (
-                <div className="flex items-center gap-1">
-                  <FaTag className="w-3 h-3" />
-                  <span>{conversation.metadata.tags[0]}</span>
+                <div className="flex items-center gap-1.5">
+                  <FaTag className="w-3.5 h-3.5" />
+                  <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
+                    {conversation.metadata.tags[0]}
+                  </span>
                   {conversation.metadata.tags.length > 1 && (
-                    <span>+{conversation.metadata.tags.length - 1}</span>
+                    <span className="text-xs">+{conversation.metadata.tags.length - 1}</span>
                   )}
                 </div>
               )}
@@ -263,7 +251,10 @@ export const ConversationHistory: React.FC<ConversationHistoryProps> = ({
 
             {/* Last Message Preview */}
             {conversation.messages.length > 0 && (
-              <p className="text-xs text-gray-600 mt-1 line-clamp-2">
+              <p className={cn(
+                'text-sm mt-2 line-clamp-2 leading-relaxed',
+                isSelected ? 'text-blue-100' : 'text-gray-500'
+              )}>
                 {conversation.messages[conversation.messages.length - 1].parts[0]?.text}
               </p>
             )}
@@ -271,22 +262,23 @@ export const ConversationHistory: React.FC<ConversationHistoryProps> = ({
 
           {/* Actions */}
           {!isEditing && (
-            <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
+            <div className="opacity-0 group-hover:opacity-100 transition-all duration-200 flex items-center gap-2">
               <button
                 onClick={(e) => {
                   e.stopPropagation();
                   onPinConversation(conversation.id);
                 }}
                 className={cn(
-                  'p-1 rounded hover:bg-gray-200 transition-colors',
+                  'p-2 rounded-lg transition-all duration-200',
                   {
-                    'text-yellow-500': isPinned,
-                    'text-gray-500': !isPinned,
+                    'text-yellow-600 bg-yellow-50 hover:bg-yellow-100': isPinned && isSelected,
+                    'text-white/70 hover:text-white hover:bg-white/20': !isPinned && isSelected,
+                    'text-gray-500 hover:text-blue-700 hover:bg-blue-50': !isPinned && !isSelected,
                   }
                 )}
                 title={isPinned ? 'Bỏ ghim' : 'Ghim'}
               >
-                <FaSpinner className="w-3 h-3" />
+                <FaSpinner className="w-3.5 h-3.5" />
               </button>
               
               <button
@@ -294,10 +286,15 @@ export const ConversationHistory: React.FC<ConversationHistoryProps> = ({
                   e.stopPropagation();
                   handleEditStart(conversation);
                 }}
-                className="p-1 rounded hover:bg-gray-200 text-gray-500 transition-colors"
+                className={cn(
+                  'p-2 rounded-lg transition-all duration-200',
+                  isSelected 
+                    ? 'text-white/70 hover:text-white hover:bg-white/20'
+                    : 'text-gray-500 hover:text-blue-700 hover:bg-blue-50'
+                )}
                 title="Đổi tên"
               >
-                <FaEdit className="w-3 h-3" />
+                <FaEdit className="w-3.5 h-3.5" />
               </button>
               
               <button
@@ -305,10 +302,15 @@ export const ConversationHistory: React.FC<ConversationHistoryProps> = ({
                   e.stopPropagation();
                   onArchiveConversation(conversation.id);
                 }}
-                className="p-1 rounded hover:bg-gray-200 text-gray-500 transition-colors"
+                className={cn(
+                  'p-2 rounded-lg transition-all duration-200',
+                  isSelected 
+                    ? 'text-white/70 hover:text-white hover:bg-white/20'
+                    : 'text-gray-500 hover:text-blue-700 hover:bg-blue-50'
+                )}
                 title={isArchived ? 'Bỏ lưu trữ' : 'Lưu trữ'}
               >
-                <FaArchive className="w-3 h-3" />
+                <FaArchive className="w-3.5 h-3.5" />
               </button>
               
               <button
@@ -318,10 +320,15 @@ export const ConversationHistory: React.FC<ConversationHistoryProps> = ({
                     onDeleteConversation(conversation.id);
                   }
                 }}
-                className="p-1 rounded hover:bg-red-100 text-red-500 transition-colors"
+                className={cn(
+                  'p-2 rounded-lg transition-all duration-200',
+                  isSelected 
+                    ? 'text-red-300 hover:text-red-200 hover:bg-red-500/20'
+                    : 'text-red-600 hover:text-red-700 hover:bg-red-50'
+                )}
                 title="Xóa"
               >
-                <FaTrash className="w-3 h-3" />
+                <FaTrash className="w-3.5 h-3.5" />
               </button>
             </div>
           )}
@@ -345,20 +352,20 @@ export const ConversationHistory: React.FC<ConversationHistoryProps> = ({
   ]);
 
   return (
-    <div className={cn('flex flex-col h-full bg-white', className)}>
+    <div className={cn('h-full flex flex-col bg-white border-r border-gray-200', className)}>
       {/* Header */}
-      <div className="p-4 border-b border-gray-200">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-lg font-semibold text-gray-900">Lịch sử trò chuyện</h2>
+      <div className="p-4 border-b border-gray-200 bg-white">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-bold text-gray-900 tracking-tight">Lịch sử trò chuyện</h2>
           
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             <button
               onClick={() => setShowBulkActions(!showBulkActions)}
               className={cn(
-                'p-2 rounded-md transition-colors',
+                'p-2 rounded-lg transition-all duration-200',
                 {
-                  'bg-blue-100 text-blue-600': showBulkActions,
-                  'text-gray-500 hover:text-gray-700 hover:bg-gray-100': !showBulkActions,
+                  'bg-blue-700 text-white': showBulkActions,
+                  'text-gray-500 hover:text-blue-700 hover:bg-blue-50 border border-gray-300': !showBulkActions,
                 }
               )}
               title="Chọn nhiều"
@@ -368,7 +375,7 @@ export const ConversationHistory: React.FC<ConversationHistoryProps> = ({
             
             <button
               onClick={onCreateConversation}
-              className="p-2 rounded-md bg-blue-700 text-white hover:bg-blue-800 transition-colors"
+              className="p-2 rounded-lg bg-blue-700 text-white hover:bg-blue-800 transition-all duration-200"
               title="Tạo cuộc trò chuyện mới"
             >
               <FaPlus className="w-4 h-4" />
@@ -377,26 +384,26 @@ export const ConversationHistory: React.FC<ConversationHistoryProps> = ({
         </div>
 
         {/* Search */}
-        <div className="relative mb-3">
-          <FaSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+        <div className="relative mb-4">
+          <FaSearch className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Tìm kiếm cuộc trò chuyện..."
-            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-700 focus:border-blue-700 bg-white transition-all duration-200 placeholder-gray-400"
           />
         </div>
 
         {/* Filters and Sort */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           <button
             onClick={() => setShowFilters(!showFilters)}
             className={cn(
-              'flex items-center gap-1 px-3 py-1 rounded-md text-sm transition-colors',
+              'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200',
               {
-                'bg-blue-100 text-blue-600': showFilters,
-                'text-gray-500 hover:text-gray-700 hover:bg-gray-100': !showFilters,
+                'bg-blue-700 text-white': showFilters,
+                'text-gray-600 hover:text-blue-700 hover:bg-blue-50 border border-gray-300': !showFilters,
               }
             )}
           >
@@ -410,7 +417,7 @@ export const ConversationHistory: React.FC<ConversationHistoryProps> = ({
               const [by, order] = e.target.value.split('-') as [HistorySortBy, HistorySortOrder];
               setSort({ by, order });
             }}
-            className="px-3 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-700 focus:border-blue-700 bg-white transition-all duration-200"
           >
             <option value="lastActivity-desc">Hoạt động gần nhất</option>
             <option value="lastActivity-asc">Hoạt động cũ nhất</option>
@@ -425,13 +432,13 @@ export const ConversationHistory: React.FC<ConversationHistoryProps> = ({
 
         {/* Bulk Actions */}
         {showBulkActions && selectedConversations.size > 0 && (
-          <div className="flex items-center gap-2 mt-3 p-2 bg-blue-50 rounded-md">
-            <span className="text-sm text-blue-700">
+          <div className="flex items-center gap-3 mt-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+            <span className="text-sm font-medium text-gray-700">
               Đã chọn {selectedConversations.size} cuộc trò chuyện
             </span>
             <button
               onClick={() => handleBulkAction('archive')}
-              className="px-3 py-1 bg-yellow-500 text-white rounded text-sm hover:bg-yellow-600 transition-colors"
+              className="px-4 py-2 bg-blue-700 text-white rounded-lg text-sm font-medium hover:bg-blue-800 transition-all duration-200"
             >
               Lưu trữ
             </button>
@@ -441,7 +448,7 @@ export const ConversationHistory: React.FC<ConversationHistoryProps> = ({
                   handleBulkAction('delete');
                 }
               }}
-              className="px-3 py-1 bg-red-700 text-white rounded text-sm hover:bg-red-800 transition-colors"
+              className="px-4 py-2 bg-red-700 text-white rounded-lg text-sm font-medium hover:bg-red-800 transition-all duration-200"
             >
               Xóa
             </button>
@@ -450,28 +457,31 @@ export const ConversationHistory: React.FC<ConversationHistoryProps> = ({
       </div>
 
       {/* Conversation List */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto bg-gray-50">
         {loading ? (
-          <div className="flex items-center justify-center p-8">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          <div className="flex items-center justify-center p-12">
+            <div className="animate-spin rounded-full h-10 w-10 border-4 border-gray-200 border-t-blue-700"></div>
           </div>
         ) : filteredAndSortedConversations.length === 0 ? (
-          <div className="flex flex-col items-center justify-center p-8 text-gray-500">
-            <FaComments className="w-12 h-12 mb-4 opacity-50" />
-            <p className="text-center">
+          <div className="flex flex-col items-center justify-center p-12 text-gray-600">
+            <FaComments className="w-16 h-16 mb-6 opacity-60" />
+            <p className="text-center font-medium text-lg mb-2">
               {searchQuery ? 'Không tìm thấy cuộc trò chuyện nào' : 'Chưa có cuộc trò chuyện nào'}
+            </p>
+            <p className="text-center text-gray-500 text-sm mb-4">
+              {searchQuery ? 'Thử tìm kiếm với từ khóa khác' : 'Bắt đầu cuộc trò chuyện đầu tiên của bạn'}
             </p>
             {!searchQuery && (
               <button
                 onClick={onCreateConversation}
-                className="mt-2 text-blue-600 hover:text-blue-800 underline"
+                className="px-6 py-3 bg-blue-700 text-white rounded-lg font-medium hover:bg-blue-800 transition-all duration-200"
               >
                 Tạo cuộc trò chuyện đầu tiên
               </button>
             )}
           </div>
         ) : (
-          <div>
+          <div className="p-2">
             {filteredAndSortedConversations.map(renderConversationItem)}
           </div>
         )}

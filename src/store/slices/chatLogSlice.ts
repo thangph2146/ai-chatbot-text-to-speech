@@ -11,7 +11,7 @@ export interface LogEntry {
   responseTime?: number;
   statusCode?: number;
   errorDetails?: string;
-  metadata?: any;
+  metadata?: Record<string, unknown>;
 }
 
 interface ChatLogState {

@@ -66,7 +66,7 @@ export interface ToolbarButton {
 export interface ModalState {
   isOpen: boolean;
   type: ModalType;
-  data?: any;
+  data?: unknown;
 }
 
 /**

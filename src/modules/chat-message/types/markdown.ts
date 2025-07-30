@@ -43,7 +43,7 @@ export type MarkdownElementType =
 export interface MarkdownElement {
   type: MarkdownElementType;
   content: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
   children?: MarkdownElement[];
 }
 

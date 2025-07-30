@@ -92,6 +92,10 @@ export interface ChatUIState {
   editingMessageId: string | null;
   replyToMessageId: string | null;
   showMarkdownPreview: boolean;
+  isScrolledToBottom: boolean;
+  isInputFocused: boolean;
+  selectedMessageId: string | null;
+  showConversationHistory: boolean;
 }
 
 /**
@@ -120,6 +124,9 @@ export interface StreamingState {
   currentMessageId: string | null;
   buffer: string;
   error: string | null;
+  accumulatedContent: string;
+  streamId: string | null;
+  currentChunk: string | null;
 }
 
 // ===== ACTION TYPES =====
@@ -142,7 +149,7 @@ export type MessageAction =
 export interface MessageActionPayload {
   messageId: string;
   action: MessageAction;
-  data?: any;
+  data?: unknown;
 }
 
 // ===== API TYPES =====
@@ -154,7 +161,7 @@ export interface SendMessageRequest {
   message: string;
   conversationId?: string;
   userId?: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 /**

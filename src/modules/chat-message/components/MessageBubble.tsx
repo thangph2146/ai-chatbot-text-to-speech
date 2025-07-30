@@ -9,7 +9,7 @@ import { cn } from '@/app/lib/utils';
 interface MessageBubbleProps {
   message: Message;
   config?: Partial<MessageBubbleConfig>;
-  onAction?: (messageId: string, action: MessageAction, data?: any) => void;
+  onAction?: (messageId: string, action: MessageAction, data?: unknown) => void;
   isSelected?: boolean;
   isEditing?: boolean;
   onEditSave?: (messageId: string, newContent: string) => void;
@@ -18,12 +18,12 @@ interface MessageBubbleProps {
 }
 
 const defaultConfig: MessageBubbleConfig = {
-  maxWidth: 'max-w-[85%]',
+  maxWidth: 'max-w-[80vw]',
   showAvatar: false,
   showTimestamp: true,
   showStatus: true,
   enableActions: true,
-  animateEntry: true,
+  animateEntry: false,
 };
 
 export const MessageBubble: React.FC<MessageBubbleProps> = ({
@@ -71,7 +71,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
     setShowActions(false);
   }, []);
 
-  const handleAction = useCallback((action: MessageAction, data?: any) => {
+  const handleAction = useCallback((action: MessageAction, data?: unknown) => {
     onAction?.(message.id, action, data);
   }, [message.id, onAction]);
 
@@ -98,31 +98,28 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 
   // Determine bubble styling
   const bubbleClasses = cn(
-    'group relative px-4 py-3 rounded-2xl transition-all duration-200',
+    'group relative px-6 py-4 rounded-2xl transition-all duration-200 border',
     finalConfig.maxWidth,
     {
-      // User messages (right side)
-      'bg-blue-700 text-white ml-auto': isUser,
-      'hover:bg-blue-800': isUser && isHovered,
+      // User messages (right side) - Professional blue-700 design
+      'bg-blue-700 text-white ml-auto shadow-lg border-blue-700/50': isUser,
+      'hover:bg-blue-800 hover:shadow-xl hover:border-blue-600': isUser && isHovered,
       
-      // Assistant messages (left side)
-      'bg-white text-gray-900 border border-gray-200 mr-auto': isAssistant,
-      'hover:bg-gray-50': isAssistant && isHovered,
+      // Assistant messages (left side) - Clean white with subtle accents
+      'bg-white text-gray-800 border-gray-200 mr-auto shadow-md': isAssistant,
+      'hover:bg-gray-50 hover:border-blue-700/30 hover:shadow-lg': isAssistant && isHovered,
       
-      // System messages (center)
-      'bg-yellow-50 text-yellow-800 mx-auto text-center text-sm': isSystem,
+      // System messages (center) - Red-700 accent for important notifications
+      'bg-red-700/10 text-red-800 mx-auto text-center text-sm border-red-700/30 shadow-sm': isSystem,
       
-      // Selection state
-      'ring-2 ring-blue-400 ring-opacity-50': isSelected,
-      
-      // Animation
-      'animate-fade-in-up': finalConfig.animateEntry,
+      // Selection state - Professional blue-700 ring
+      'ring-2 ring-blue-700/60 shadow-xl border-blue-700/70': isSelected,
     },
     className
   );
 
   const containerClasses = cn(
-    'flex mb-4 transition-all duration-200',
+    'flex mb-6 transition-all duration-200 group/container',
     {
       'justify-end': isUser,
       'justify-start': isAssistant,
@@ -136,31 +133,31 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >
-      <div className="relative max-w-full">
+      <div className="relative max-w-[80%]">
         {/* Message Bubble */}
         <div className={bubbleClasses}>
           {/* Editing Mode */}
           {isEditing ? (
-            <div className="space-y-3">
+            <div className="space-y-4">
               <textarea
                 value={editContent}
                 onChange={(e) => setEditContent(e.target.value)}
                 onKeyDown={handleKeyDown}
-                className="w-full min-h-[100px] p-3 border border-gray-300 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
-                placeholder="Chỉnh sửa tin nhắn..."
+                className="w-full min-h-[120px] p-4 border-2 border-blue-700/30 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-blue-700/40 focus:border-blue-700 text-gray-800 bg-white shadow-sm transition-all duration-200 font-medium placeholder:text-gray-400"
+                placeholder="Chỉnh sửa tin nhắn của bạn..."
                 autoFocus
               />
-              <div className="flex gap-2 justify-end">
+              <div className="flex gap-4 justify-end">
                 <button
                   onClick={handleEditCancel}
-                  className="px-3 py-1 text-sm bg-gray-500 text-white rounded hover:bg-gray-600 transition-colors"
+                  className="px-5 py-2 bg-white text-gray-700 rounded-lg hover:bg-gray-100 transition-all duration-200 font-medium shadow-sm border border-gray-300 hover:border-gray-400"
                 >
                   Hủy
                 </button>
                 <button
                   onClick={handleEditSave}
                   disabled={!editContent.trim()}
-                  className="px-3 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                  className="px-5 py-2 bg-blue-700 text-white rounded-lg hover:bg-blue-800 transition-all duration-200 font-medium shadow-sm border border-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Lưu
                 </button>
@@ -168,35 +165,44 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
             </div>
           ) : (
             /* Normal Display Mode */
-            <div className="space-y-2">
+            <div className="space-y-3">
               {/* Message Content */}
-              <div className="prose prose-sm max-w-none">
+              <div className="prose prose-sm w-fit max-w-[75vw]">
                 {message.parts && Array.isArray(message.parts) ? message.parts.map((part, index) => (
-                  <div key={index}>
+                  <div key={index} className="w-fit leading-relaxed">
                     {part.type === 'markdown' || isAssistant ? (
                       <MarkdownRenderer 
                         content={part.text || ''}
                         className={cn({
                           'prose-invert': isUser,
+                          'prose-blue': isAssistant,
                         })}
                       />
                     ) : (
-                      <div className="whitespace-pre-wrap break-words">
+                      <div className={cn('whitespace-pre-wrap break-words w-fit font-medium leading-relaxed', {
+                        'text-white': isUser,
+                        'text-gray-800': isAssistant,
+                        'text-blue-800': isSystem,
+                      })}>
                         {part.text || ''}
                       </div>
                     )}
                   </div>
                 )) : (
-                  <div className="text-gray-500 italic">
-                    No content available
+                  <div className="text-gray-400 italic font-medium">
+                    Không có nội dung
                   </div>
                 )}
               </div>
 
               {/* Message Metadata */}
-              <div className="flex items-center justify-between text-xs opacity-70">
+              <div className="flex items-center justify-between text-xs mt-3 opacity-75">
                 {finalConfig.showTimestamp && (
-                  <span>
+                  <span className={cn('font-medium', {
+                    'text-blue-100': isUser,
+                    'text-gray-500': isAssistant,
+                    'text-red-700': isSystem,
+                  })}>
                     {formatTimestamp(message.timestamp)}
                   </span>
                 )}
@@ -205,8 +211,9 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                   <MessageStatus 
                     status={message.status}
                     className={cn({
-                      'text-blue-200': isUser,
+                      'text-blue-100': isUser,
                       'text-gray-500': isAssistant,
+                      'text-red-700': isSystem,
                     })}
                   />
                 )}
@@ -222,11 +229,12 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
             messageRole={message.role}
             onAction={handleAction}
             className={cn(
-              'absolute top-0 transition-opacity duration-200',
+              'absolute top-2 transition-all duration-200 z-10',
               {
                 'right-full mr-2': isUser,
                 'left-full ml-2': isAssistant,
                 'opacity-0 group-hover:opacity-100': !isSelected,
+                'opacity-100': isSelected,
               }
             )}
           />

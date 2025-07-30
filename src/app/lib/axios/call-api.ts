@@ -54,7 +54,7 @@ export const callApiRoute = {
     data: unknown, 
     onMessage: (message: string) => void, 
     onComplete: (result: { fullMessage: string; conversationId: string | null; messageId: string | null }) => void, 
-    onError: (error: any) => void
+    onError: (error: Error) => void
   ) => {
     let fullMessage = '';
     let latestConversationId: string | null = null;
@@ -161,7 +161,7 @@ export const callApiRoute = {
       onComplete({ fullMessage, conversationId: latestConversationId, messageId });
     } catch (error) {
       console.error('Error in streaming chat:', error);
-      onError(error);
+      onError(error as Error);
     }
   },
 

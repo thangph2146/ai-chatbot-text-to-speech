@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import { MarkdownOptions, CodeBlock, MarkdownTheme } from '../types/markdown';
 import { cn } from '@/app/lib/utils';
 import { FaCopy, FaCheck, FaCode, FaExpand } from 'react-icons/fa';
@@ -11,15 +11,7 @@ interface MarkdownRendererProps {
   onCodeCopy?: (code: string, language: string) => void;
 }
 
-const defaultOptions: MarkdownOptions = {
-  enableSyntaxHighlighting: true,
-  enableMath: false,
-  enableTables: true,
-  enableTaskLists: true,
-  enableEmoji: true,
-  sanitize: true,
-  breaks: true,
-};
+
 
 const defaultTheme: MarkdownTheme = {
   codeTheme: 'github',
@@ -30,7 +22,6 @@ const defaultTheme: MarkdownTheme = {
 
 export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
   content,
-  options = {},
   theme = {},
   className,
   onCodeCopy,
@@ -38,13 +29,8 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
   const [copiedBlocks, setCopiedBlocks] = useState<Record<string, boolean>>({});
   const [expandedBlocks, setExpandedBlocks] = useState<Record<string, boolean>>({});
 
-  const finalOptions = { ...defaultOptions, ...options };
-  const finalTheme = { ...defaultTheme, ...theme };
 
-  // Parse markdown content into structured format
-  const parsedContent = useMemo(() => {
-    return parseMarkdownContent(content, finalOptions);
-  }, [content, finalOptions]);
+  const finalTheme = { ...defaultTheme, ...theme };
 
   const handleCopyCode = useCallback(async (code: string, language: string, blockId: string) => {
     try {
@@ -80,14 +66,14 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
     return (
       <div key={blockId} className="relative group my-4">
         {/* Code block header */}
-        <div className="flex items-center justify-between bg-gray-800 text-gray-200 px-4 py-2 rounded-t-lg text-sm">
+        <div className="flex items-center justify-between bg-gradient-to-r from-blue-700 to-blue-800 text-white px-4 py-2 rounded-t-lg text-sm shadow-lg">
           <div className="flex items-center gap-2">
             <FaCode className="w-3 h-3" />
             <span className="font-medium">
               {block.language || 'text'}
             </span>
             {block.filename && (
-              <span className="text-gray-400">• {block.filename}</span>
+              <span className="text-blue-200">• {block.filename}</span>
             )}
           </div>
           
@@ -95,7 +81,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
             {shouldTruncate && (
               <button
                 onClick={() => toggleBlockExpansion(blockId)}
-                className="flex items-center gap-1 px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded text-xs transition-colors"
+                className="flex items-center gap-1 px-2 py-1 bg-blue-600 hover:bg-blue-500 rounded text-xs transition-all duration-200 shadow-sm"
               >
                 <FaExpand className="w-3 h-3" />
                 {isExpanded ? 'Thu gọn' : 'Mở rộng'}
@@ -104,11 +90,11 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
             
             <button
               onClick={() => handleCopyCode(block.code, block.language, blockId)}
-              className="flex items-center gap-1 px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded text-xs transition-colors"
+              className="flex items-center gap-1 px-2 py-1 bg-blue-600 hover:bg-blue-500 rounded text-xs transition-all duration-200 shadow-sm"
             >
               {isCopied ? (
                 <>
-                  <FaCheck className="w-3 h-3 text-green-400" />
+                  <FaCheck className="w-3 h-3 text-blue-200" />
                   Đã sao chép
                 </>
               ) : (
@@ -122,7 +108,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
         </div>
         
         {/* Code content */}
-        <div className="bg-gray-900 rounded-b-lg overflow-hidden">
+        <div className="bg-gradient-to-b from-gray-900 to-gray-800 rounded-b-lg overflow-hidden border border-blue-200">
           <pre className="p-4 overflow-x-auto text-sm">
             <code className={`language-${block.language} text-gray-100`}>
               {displayCode}
@@ -133,54 +119,10 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
     );
   }, [expandedBlocks, copiedBlocks, handleCopyCode, toggleBlockExpansion]);
 
-  const renderInlineCode = useCallback((code: string) => {
-    return (
-      <code className="bg-gray-100 text-gray-800 px-1.5 py-0.5 rounded text-sm font-mono">
-        {code}
-      </code>
-    );
-  }, []);
 
-  const renderTable = useCallback((tableContent: string) => {
-    const lines = tableContent.trim().split('\n');
-    if (lines.length < 2) return null;
-
-    const headers = lines[0].split('|').map(h => h.trim()).filter(Boolean);
-    const rows = lines.slice(2).map(line => 
-      line.split('|').map(cell => cell.trim()).filter(Boolean)
-    );
-
-    return (
-      <div className="my-4 overflow-x-auto">
-        <table className="min-w-full border border-gray-200 rounded-lg">
-          <thead className="bg-gray-50">
-            <tr>
-              {headers.map((header, index) => (
-                <th key={index} className="px-4 py-2 text-left font-medium text-gray-900 border-b">
-                  {header}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row, rowIndex) => (
-              <tr key={rowIndex} className="hover:bg-gray-50">
-                {row.map((cell, cellIndex) => (
-                  <td key={cellIndex} className="px-4 py-2 border-b text-gray-700">
-                    {cell}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    );
-  }, []);
 
   const renderContent = useCallback(() => {
     const elements = [];
-    let currentIndex = 0;
 
     // Simple markdown parsing for streaming content
     const lines = content.split('\n');
@@ -224,7 +166,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
       
       // Inline code
       processedLine = processedLine.replace(/`([^`]+)`/g, (match, code) => {
-        return `<code class="bg-gray-100 text-gray-800 px-1.5 py-0.5 rounded text-sm font-mono">${code}</code>`;
+        return `<code class="bg-gradient-to-r from-blue-50 to-blue-100 text-blue-800 px-1.5 py-0.5 rounded text-sm font-mono border border-blue-200">${code}</code>`;
       });
       
       // Bold text
@@ -235,7 +177,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
       
       // Links
       processedLine = processedLine.replace(/\[([^\]]+)\]\(([^)]+)\)/g, 
-        '<a href="$2" class="text-blue-600 hover:text-blue-800 underline" target="_blank" rel="noopener noreferrer">$1</a>'
+        '<a href="$2" class="text-blue-700 hover:text-blue-800 underline hover:bg-blue-50 px-1 py-0.5 rounded transition-all duration-200" target="_blank" rel="noopener noreferrer">$1</a>'
       );
 
       // Headers
@@ -259,9 +201,6 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
 
       // Lists
       if (line.match(/^\s*[-*+]\s/) || line.match(/^\s*\d+\.\s/)) {
-        const isOrdered = line.match(/^\s*\d+\.\s/);
-        const content = line.replace(/^\s*(?:[-*+]|\d+\.)\s*/, '');
-        
         elements.push(
           <li key={`list-${i}`} className="ml-4 mb-1" dangerouslySetInnerHTML={{ __html: processedLine.replace(/^\s*(?:[-*+]|\d+\.)\s*/, '') }} />
         );
@@ -314,15 +253,6 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
 };
 
 // Helper function to parse markdown content
-function parseMarkdownContent(content: string, options: MarkdownOptions) {
-  // This is a simplified parser for demonstration
-  // In a real implementation, you might want to use a library like marked or remark
-  return {
-    hasCode: content.includes('```') || content.includes('`'),
-    hasMath: content.includes('$'),
-    hasImages: content.includes('!['),
-    wordCount: content.split(/\s+/).length,
-  };
-}
+
 
 export default MarkdownRenderer;

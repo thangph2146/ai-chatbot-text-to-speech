@@ -7,7 +7,6 @@ import {
   FaCheck,
   FaCheckDouble,
   FaExclamationTriangle,
-  FaSpinner,
   FaPlay,
 } from 'react-icons/fa';
 
@@ -30,46 +29,46 @@ const statusConfigs: Record<MessageStatusType, StatusConfig> = {
   pending: {
     icon: FaClock,
     label: 'Đang chờ',
-    color: 'text-gray-500',
-    bgColor: 'bg-gray-100',
+    color: 'text-gray-600',
+    bgColor: 'bg-gradient-to-r from-gray-50 to-gray-100 border border-gray-200',
   },
   sending: {
     icon: FaPaperPlane,
     label: 'Đang gửi',
-    color: 'text-blue-500',
-    bgColor: 'bg-blue-100',
+    color: 'text-blue-700',
+    bgColor: 'bg-gradient-to-r from-blue-50 to-blue-100 border border-blue-200',
     animate: true,
   },
   sent: {
     icon: FaCheck,
     label: 'Đã gửi',
-    color: 'text-green-500',
-    bgColor: 'bg-green-100',
+    color: 'text-blue-700',
+    bgColor: 'bg-gradient-to-r from-blue-50 to-blue-100 border border-blue-200',
   },
   delivered: {
     icon: FaCheckDouble,
     label: 'Đã nhận',
-    color: 'text-green-600',
-    bgColor: 'bg-green-100',
+    color: 'text-blue-700',
+    bgColor: 'bg-gradient-to-r from-blue-50 to-blue-100 border border-blue-200',
   },
   failed: {
     icon: FaExclamationTriangle,
     label: 'Thất bại',
-    color: 'text-red-500',
-    bgColor: 'bg-red-100',
+    color: 'text-red-700',
+    bgColor: 'bg-gradient-to-r from-red-50 to-red-100 border border-red-200',
   },
   streaming: {
     icon: FaPlay,
     label: 'Đang trả lời',
-    color: 'text-purple-500',
-    bgColor: 'bg-purple-100',
+    color: 'text-blue-700',
+    bgColor: 'bg-gradient-to-r from-blue-50 to-blue-100 border border-blue-200',
     animate: true,
   },
   completed: {
     icon: FaCheckDouble,
     label: 'Hoàn thành',
-    color: 'text-green-600',
-    bgColor: 'bg-green-100',
+    color: 'text-blue-700',
+    bgColor: 'bg-gradient-to-r from-blue-50 to-blue-100 border border-blue-200',
   },
 };
 
@@ -104,7 +103,7 @@ export const MessageStatus: React.FC<MessageStatusProps> = ({
     return (
       <div
         className={cn(
-          'inline-flex items-center gap-1.5 rounded-full',
+          'inline-flex items-center gap-1.5 rounded-full shadow-sm',
           bgColor,
           color,
           paddingClasses[size],
@@ -166,7 +165,7 @@ export const FailedIndicator: React.FC<{ className?: string; onRetry?: () => voi
     {onRetry && (
       <button
         onClick={onRetry}
-        className="text-xs text-red-600 hover:text-red-800 underline"
+        className="text-xs text-red-700 hover:text-red-800 underline hover:bg-red-50 px-2 py-1 rounded transition-colors duration-200"
       >
         Thử lại
       </button>

@@ -3,7 +3,6 @@ import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import {
   sendMessageWithLogging,
   setInput,
-  addMessage,
   clearMessages,
   startStreaming,
   updateStreamingContent,
@@ -19,18 +18,11 @@ import {
   updateConversation,
   deleteConversation,
   setShowLogs,
-  Message,
 } from "@/store/slices/messageSlice";
 import { 
-  Message as CoreMessage, 
-  StreamingState, 
   ChatUIState, 
   Conversation,
-  MessageAction,
-  MessageActionPayload
 } from "../types";
-import { generateId } from "../utils/textUtils";
-import logger from "@/app/lib/logger";
 // Legacy Message interface for backward compatibility
 export interface LegacyMessage {
   role: "user" | "model";
@@ -66,11 +58,10 @@ export const useChatMessage = () => {
     (messageText: string, userId?: string) => {
       if (!messageText.trim()) return;
 
-      // Thêm tin nhắn user vào danh sách
       // Gửi tin nhắn với logging
       dispatch(sendMessageWithLogging({ messageText, userId }));
     },
-    [dispatch, currentConversationId]
+    [dispatch]
   );
 
   const clearAllMessages = useCallback(() => {
@@ -82,16 +73,16 @@ export const useChatMessage = () => {
     dispatch(startStreaming({ streamId }));
   }, [dispatch]);
 
-  const handleUpdateStreamingContent = useCallback((content: string, chunk?: any) => {
-    dispatch(updateStreamingContent({ content, chunk }));
+  const handleUpdateStreamingContent = useCallback((messageId: string, content: string) => {
+    dispatch(updateStreamingContent({ messageId, content }));
   }, [dispatch]);
 
-  const handleStopStreaming = useCallback(() => {
-    dispatch(stopStreaming());
+  const handleStopStreaming = useCallback((messageId: string, finalContent: string) => {
+    dispatch(stopStreaming({ messageId, finalContent }));
   }, [dispatch]);
 
-  const handleSetStreamingError = useCallback((error: string) => {
-    dispatch(setStreamingError(error));
+  const handleSetStreamingError = useCallback((messageId: string, error: string) => {
+    dispatch(setStreamingError({ messageId, error }));
   }, [dispatch]);
 
   // UI state functions

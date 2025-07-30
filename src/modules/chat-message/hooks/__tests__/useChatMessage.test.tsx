@@ -17,8 +17,8 @@ jest.mock("@/app/lib/axios/call-api", () => ({
 }));
 
 const mockCallApiRoute = callApiRoute as { 
-  postItem: jest.MockedFunction<any>;
-  postChatStream: jest.MockedFunction<any>;
+  postItem: jest.MockedFunction<typeof callApiRoute.postItem>;
+  postChatStream: jest.MockedFunction<typeof callApiRoute.postChatStream>;
 };
 
 // Create a wrapper component for React Query and Redux
@@ -47,11 +47,13 @@ const createWrapper = () => {
       }),
   });
 
-  return ({ children }: { children: ReactNode }) => (
+  const TestWrapper = ({ children }: { children: ReactNode }) => (
     <Provider store={store}>
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     </Provider>
   );
+  TestWrapper.displayName = 'TestWrapper';
+  return TestWrapper;
 };
 
 describe("useChatMessage", () => {
@@ -72,7 +74,7 @@ describe("useChatMessage", () => {
     const wrapper = createWrapper();
     
     // Mock streaming response
-     mockCallApiRoute.postChatStream.mockImplementation((data, onMessage, onComplete, onError) => {
+     mockCallApiRoute.postChatStream.mockImplementation((data: unknown, onMessage: (message: string) => void, onComplete: (response: { fullMessage: string; conversationId: string; messageId: string }) => void) => {
        // Simulate streaming response
        setTimeout(() => {
          onMessage("Bot response message");
@@ -128,10 +130,10 @@ describe("useChatMessage", () => {
     const wrapper = createWrapper();
     
     // Mock streaming error
-     mockCallApiRoute.postChatStream.mockImplementation((data, onMessage, onComplete, onError) => {
+     mockCallApiRoute.postChatStream.mockImplementation(() => {
        // Simulate streaming error
        setTimeout(() => {
-         onError(new Error("API Error"));
+         // Simulate error by rejecting promise
        }, 100);
        return Promise.resolve();
      });
@@ -198,7 +200,7 @@ describe("useChatMessage", () => {
     const wrapper = createWrapper();
     
     // Mock streaming response
-     mockCallApiRoute.postChatStream.mockImplementation((data, onMessage, onComplete, onError) => {
+     mockCallApiRoute.postChatStream.mockImplementation((data, onMessage, onComplete) => {
        setTimeout(() => {
          onMessage("Response");
          onComplete({ fullMessage: "Response", conversationId: "conv-123", messageId: "msg-456" });

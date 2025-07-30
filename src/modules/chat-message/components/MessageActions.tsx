@@ -16,7 +16,7 @@ import {
 interface MessageActionsProps {
   messageId: string;
   messageRole: 'user' | 'model' | 'system';
-  onAction: (action: MessageAction, data?: any) => void;
+  onAction: (action: MessageAction, data?: unknown) => void;
   className?: string;
   compact?: boolean;
 }
@@ -61,14 +61,14 @@ export const MessageActions: React.FC<MessageActionsProps> = ({
           icon: FaEdit,
           label: 'Chỉnh sửa',
           action: 'edit',
-          color: 'text-blue-600',
+          color: 'text-blue-700',
           hoverColor: 'hover:text-blue-800',
         },
         {
           icon: FaTrash,
           label: 'Xóa',
           action: 'delete',
-          color: 'text-red-600',
+          color: 'text-red-700',
           hoverColor: 'hover:text-red-800',
           requiresConfirm: true,
         },
@@ -82,29 +82,29 @@ export const MessageActions: React.FC<MessageActionsProps> = ({
           icon: FaRedo,
           label: 'Tạo lại',
           action: 'regenerate',
-          color: 'text-green-600',
-          hoverColor: 'hover:text-green-800',
+          color: 'text-blue-700',
+          hoverColor: 'hover:text-blue-800',
         },
         {
           icon: FaReply,
           label: 'Trả lời',
           action: 'reply',
-          color: 'text-purple-600',
-          hoverColor: 'hover:text-purple-800',
+          color: 'text-blue-700',
+          hoverColor: 'hover:text-blue-800',
         },
         {
           icon: FaBookmark,
           label: 'Lưu',
           action: 'bookmark',
-          color: 'text-yellow-600',
-          hoverColor: 'hover:text-yellow-800',
+          color: 'text-blue-700',
+          hoverColor: 'hover:text-blue-800',
         },
         {
           icon: FaShare,
           label: 'Chia sẻ',
           action: 'share',
-          color: 'text-indigo-600',
-          hoverColor: 'hover:text-indigo-800',
+          color: 'text-blue-700',
+          hoverColor: 'hover:text-blue-800',
         },
       ];
     }
@@ -140,24 +140,24 @@ export const MessageActions: React.FC<MessageActionsProps> = ({
     setConfirmingAction(null);
   }, []);
 
-  const renderActionButton = useCallback((actionConfig: ActionConfig, index: number) => {
-    const { icon: Icon, label, action, color, hoverColor, requiresConfirm } = actionConfig;
+  const renderActionButton = useCallback((actionConfig: ActionConfig) => {
+    const { icon: Icon, label, action, color, hoverColor } = actionConfig;
     const isConfirming = confirmingAction === action;
     const isCopied = copiedAction === action;
 
     if (isConfirming) {
       return (
-        <div key={action} className="flex items-center gap-1">
+        <div key={action} className="flex items-center gap-2">
           <button
             onClick={() => handleActionClick(actionConfig)}
-            className="px-2 py-1 text-xs bg-red-500 text-white rounded hover:bg-red-600 transition-colors"
+            className="px-3 py-1.5 text-xs font-medium bg-red-700 text-white rounded-lg hover:bg-red-800 transition-all duration-200 shadow-md"
             title="Xác nhận xóa"
           >
             Xóa
           </button>
           <button
             onClick={handleCancelConfirm}
-            className="px-2 py-1 text-xs bg-gray-500 text-white rounded hover:bg-gray-600 transition-colors"
+            className="px-3 py-1.5 text-xs font-medium bg-white text-gray-700 rounded-lg hover:bg-gray-50 transition-all duration-200 shadow-md border border-gray-300"
             title="Hủy"
           >
             Hủy
@@ -171,8 +171,8 @@ export const MessageActions: React.FC<MessageActionsProps> = ({
         key={action}
         onClick={() => handleActionClick(actionConfig)}
         className={cn(
-          'p-2 rounded-full transition-all duration-200 transform hover:scale-110',
-          'bg-white shadow-md hover:shadow-lg',
+          'p-2 rounded-lg transition-all duration-200',
+          'bg-white shadow-md hover:shadow-lg border border-gray-200 hover:border-blue-700/30',
           color,
           hoverColor,
           {
@@ -197,33 +197,33 @@ export const MessageActions: React.FC<MessageActionsProps> = ({
     return (
       <div className="flex items-center gap-1">
         {/* Primary actions */}
-        {primaryActions.map((action, index) => renderActionButton(action, index))}
+        {primaryActions.map((action) => renderActionButton(action))}
         
         {/* Dropdown for secondary actions */}
         {secondaryActions.length > 0 && (
           <div className="relative">
             <button
               onClick={() => setShowDropdown(!showDropdown)}
-              className="p-2 rounded-full bg-white shadow-md hover:shadow-lg text-gray-600 hover:text-gray-800 transition-all duration-200 transform hover:scale-110"
+              className="p-2 rounded-lg bg-white shadow-md hover:shadow-lg border border-gray-200 hover:border-blue-700/30 text-blue-700 hover:text-blue-800 transition-all duration-200"
               title="Thêm hành động"
             >
               <FaEllipsisV className="w-4 h-4" />
             </button>
             
             {showDropdown && (
-              <div className="absolute top-full right-0 mt-1 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-10 min-w-[120px]">
-                {secondaryActions.map((action, index) => (
+              <div className="absolute top-full right-0 mt-2 bg-white rounded-lg shadow-xl border border-gray-200 py-2 z-10 min-w-[140px]">
+                {secondaryActions.map((action) => (
                   <button
                     key={action.action}
                     onClick={() => handleActionClick(action)}
                     className={cn(
-                      'w-full px-3 py-2 text-left text-sm transition-colors flex items-center gap-2',
+                      'w-full px-4 py-2 text-left text-sm font-medium transition-all duration-200 flex items-center gap-3 rounded-md mx-1',
                       action.color,
                       action.hoverColor,
                       'hover:bg-gray-50'
                     )}
                   >
-                    <action.icon className="w-3 h-3" />
+                    <action.icon className="w-3.5 h-3.5" />
                     {action.label}
                   </button>
                 ))}
@@ -238,14 +238,14 @@ export const MessageActions: React.FC<MessageActionsProps> = ({
   const renderFullActions = useCallback(() => {
     return (
       <div className="flex items-center gap-1">
-        {availableActions.map((action, index) => renderActionButton(action, index))}
+        {availableActions.map((action) => renderActionButton(action))}
       </div>
     );
   }, [availableActions, renderActionButton]);
 
   // Close dropdown when clicking outside
   React.useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
+    const handleClickOutside = () => {
       if (showDropdown) {
         setShowDropdown(false);
       }

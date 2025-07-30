@@ -46,10 +46,12 @@ const initialState: MessageState = {
   currentConversationId: null,
   streamingState: {
     isStreaming: false,
-    currentChunk: null,
+    currentMessageId: null,
+    buffer: "",
+    error: null,
     accumulatedContent: "",
     streamId: null,
-    error: null
+    currentChunk: null
   },
   uiState: {
     isInputFocused: false,
@@ -82,7 +84,7 @@ export const sendMessageWithLogging = createAsyncThunk(
         type: "request",
         message: messageText,
         userId,
-        conversationId: (getState() as any).message.currentConversationId,
+        conversationId: (getState() as { message: MessageState }).message.currentConversationId,
         metadata: {
           requestId,
           userAgent:
@@ -110,7 +112,7 @@ export const sendMessageWithLogging = createAsyncThunk(
           role: 'model',
           parts: [{ text: '' }],
           timestamp: Date.now(),
-          conversationId: (getState() as any).message.currentConversationId,
+          conversationId: (getState() as { message: MessageState }).message.currentConversationId,
         }
       });
 
@@ -120,7 +122,7 @@ export const sendMessageWithLogging = createAsyncThunk(
             inputs: {},
             query: messageText,
             response_mode: "streaming",
-            conversation_id: (getState() as any).message.currentConversationId || "",
+            conversation_id: (getState() as { message: MessageState }).message.currentConversationId || "",
             user: userId || "anonymous"
           },
           (message: string) => {
@@ -132,12 +134,12 @@ export const sendMessageWithLogging = createAsyncThunk(
             conversationId = result.conversationId || "";
             messageId = result.messageId || botMessageId;
             dispatch({ type: 'message/stopStreaming', payload: { messageId: botMessageId, finalContent: fullResponse } });
-            if (result.conversationId && result.conversationId !== (getState() as any).message.currentConversationId) {
+            if (result.conversationId && result.conversationId !== (getState() as { message: MessageState }).message.currentConversationId) {
               dispatch({ type: 'message/setCurrentConversationId', payload: result.conversationId });
             }
             resolve();
           },
-          (error: any) => {
+          (error: Error) => {
             dispatch({ type: 'message/setStreamingError', payload: { messageId: botMessageId, error: error.message || 'Streaming error' } });
             reject(error);
           }
@@ -155,7 +157,7 @@ export const sendMessageWithLogging = createAsyncThunk(
           type: "response",
           message: fullResponse,
           userId,
-          conversationId: conversationId || (getState() as any).message.currentConversationId,
+          conversationId: conversationId || (getState() as { message: MessageState }).message.currentConversationId,
           messageId: messageId || `msg_${Date.now()}`,
           responseTime,
           statusCode: 200,
@@ -169,32 +171,38 @@ export const sendMessageWithLogging = createAsyncThunk(
       return {
         response: { answer: fullResponse, fullMessage: fullResponse },
         responseTime,
-        conversationId: conversationId || (getState() as any).message.currentConversationId,
+        conversationId: conversationId || (getState() as { message: MessageState }).message.currentConversationId,
         messageId: messageId || `msg_${Date.now()}`,
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       const endTime = Date.now();
       const responseTime = endTime - startTime;
 
       // Log error
+      const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+      const hasStatus = (err: unknown): err is { status: number } => {
+        return err !== null && typeof err === 'object' && 'status' in err;
+      };
+      const errorStatus = hasStatus(error) ? error.status : 500;
+      
       dispatch(
         addLog({
           id: `err_${requestId}`,
           timestamp: endTime,
           type: "error",
-          message: error.message || "Unknown error occurred",
+          message: errorMessage,
           userId,
-          conversationId: (getState() as any).message.currentConversationId,
+          conversationId: (getState() as { message: MessageState }).message.currentConversationId,
           responseTime,
-          statusCode: error.status || 500,
+          statusCode: errorStatus,
           errorDetails: JSON.stringify({
-            name: error.name,
-            message: error.message,
-            stack: error.stack,
+            name: error instanceof Error ? error.name : 'Unknown',
+            message: errorMessage,
+            stack: error instanceof Error ? error.stack : undefined,
           }),
           metadata: {
             requestId,
-            errorType: error.constructor.name,
+            errorType: error?.constructor?.name || 'Unknown',
           },
         })
       );
@@ -342,7 +350,7 @@ const messageSlice = createSlice({
         if (lastMessage && lastMessage.role === 'model') {
           lastMessage.parts = [{ text: action.payload.response?.fullMessage || state.streamingState.accumulatedContent }];
           lastMessage.id = action.payload.messageId || lastMessage.id;
-          lastMessage.conversationId = action.payload.conversationId;
+          lastMessage.conversationId = action.payload.conversationId || undefined;
           lastMessage.messageId = action.payload.messageId;
           lastMessage.timestamp = Date.now();
         }
