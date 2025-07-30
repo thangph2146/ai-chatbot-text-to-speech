@@ -1,11 +1,11 @@
 import { configureStore } from "@reduxjs/toolkit";
-import chatLogReducer from "./slices/chatLogSlice";
 import messageReducer from "./slices/messageSlice";
+import chatLogReducer from "./slices/chatLogSlice";
 
 export const store = configureStore({
   reducer: {
-    chatLog: chatLogReducer,
     message: messageReducer,
+    chatLog: chatLogReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({

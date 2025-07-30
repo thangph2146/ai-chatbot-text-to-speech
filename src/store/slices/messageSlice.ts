@@ -1,7 +1,21 @@
 import { createSlice, createAsyncThunk, PayloadAction } from "@reduxjs/toolkit";
 import { callApiRoute } from "@/app/lib/axios/call-api";
 import { addLog } from "./chatLogSlice";
+import { 
+  Conversation, 
+  StreamingState, 
+  ChatUIState,
+} from "@/modules/chat-message/types";
 
+// Helper function to ensure message has valid parts
+const ensureMessageParts = (message: Message): Message => {
+  return {
+    ...message,
+    parts: message.parts && Array.isArray(message.parts) ? message.parts : [{ text: '' }]
+  };
+};
+
+// Legacy Message interface for backward compatibility
 export interface Message {
   id: string;
   role: "user" | "model";
@@ -13,18 +27,39 @@ export interface Message {
 
 interface MessageState {
   messages: Message[];
+  conversations: Conversation[];
   input: string;
   isLoading: boolean;
   error: string | null;
   currentConversationId: string | null;
+  streamingState: StreamingState;
+  uiState: Partial<ChatUIState>;
+  showLogs: boolean;
 }
 
 const initialState: MessageState = {
   messages: [],
+  conversations: [],
   input: "",
   isLoading: false,
   error: null,
   currentConversationId: null,
+  streamingState: {
+    isStreaming: false,
+    currentChunk: null,
+    accumulatedContent: "",
+    streamId: null,
+    error: null
+  },
+  uiState: {
+    isInputFocused: false,
+    showMarkdownPreview: false,
+    isScrolledToBottom: true,
+    selectedMessageId: null,
+    editingMessageId: null,
+    showConversationHistory: false
+  },
+  showLogs: false
 };
 
 // Async thunk để gửi tin nhắn với logging
@@ -63,6 +98,22 @@ export const sendMessageWithLogging = createAsyncThunk(
       let conversationId = "";
       let messageId = "";
       
+      const streamId = `stream_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      dispatch({ type: 'message/startStreaming', payload: { streamId } });
+
+      // Create a placeholder for the bot's message
+      const botMessageId = `msg_${Date.now()}`;
+      dispatch({
+        type: 'message/addMessage',
+        payload: {
+          id: botMessageId,
+          role: 'model',
+          parts: [{ text: '' }],
+          timestamp: Date.now(),
+          conversationId: (getState() as any).message.currentConversationId,
+        }
+      });
+
       await new Promise<void>((resolve, reject) => {
         callApiRoute.postChatStream(
           {
@@ -72,25 +123,22 @@ export const sendMessageWithLogging = createAsyncThunk(
             conversation_id: (getState() as any).message.currentConversationId || "",
             user: userId || "anonymous"
           },
-          // onMessage callback
           (message: string) => {
             fullResponse += message;
+            dispatch({ type: 'message/updateStreamingContent', payload: { messageId: botMessageId, content: message } });
           },
-          // onComplete callback
           (result: { fullMessage: string; conversationId: string | null; messageId: string | null }) => {
             fullResponse = result.fullMessage;
             conversationId = result.conversationId || "";
-            messageId = result.messageId || "";
-            
-            // Update conversation ID in state if we got a new one
+            messageId = result.messageId || botMessageId;
+            dispatch({ type: 'message/stopStreaming', payload: { messageId: botMessageId, finalContent: fullResponse } });
             if (result.conversationId && result.conversationId !== (getState() as any).message.currentConversationId) {
               dispatch({ type: 'message/setCurrentConversationId', payload: result.conversationId });
             }
-            
             resolve();
           },
-          // onError callback
           (error: any) => {
+            dispatch({ type: 'message/setStreamingError', payload: { messageId: botMessageId, error: error.message || 'Streaming error' } });
             reject(error);
           }
         );
@@ -119,7 +167,7 @@ export const sendMessageWithLogging = createAsyncThunk(
       );
 
       return {
-        response: { answer: fullResponse },
+        response: { answer: fullResponse, fullMessage: fullResponse },
         responseTime,
         conversationId: conversationId || (getState() as any).message.currentConversationId,
         messageId: messageId || `msg_${Date.now()}`,
@@ -165,7 +213,8 @@ const messageSlice = createSlice({
     },
 
     addMessage: (state, action: PayloadAction<Message>) => {
-      state.messages.push(action.payload);
+      const message = ensureMessageParts(action.payload);
+      state.messages.push(message);
     },
 
     clearMessages: (state) => {
@@ -180,38 +229,132 @@ const messageSlice = createSlice({
     setError: (state, action: PayloadAction<string | null>) => {
       state.error = action.payload;
     },
+
+    // Streaming state management
+    startStreaming: (state, action: PayloadAction<{ streamId: string }>) => {
+      state.streamingState.isStreaming = true;
+      state.streamingState.streamId = action.payload.streamId;
+      state.streamingState.accumulatedContent = "";
+      state.streamingState.error = null;
+    },
+
+    updateStreamingContent: (state, action: PayloadAction<{ messageId: string; content: string }>) => {
+      const { messageId, content } = action.payload;
+      const message = state.messages.find(m => m.id === messageId);
+      if (message) {
+        message.parts[0].text += content;
+        state.streamingState.accumulatedContent += content;
+      }
+    },
+
+    stopStreaming: (state, action: PayloadAction<{ messageId: string; finalContent: string }>) => {
+      const { messageId, finalContent } = action.payload;
+      const message = state.messages.find(m => m.id === messageId);
+      if (message) {
+        message.parts[0].text = finalContent;
+      }
+      state.streamingState.isStreaming = false;
+      state.streamingState.streamId = null;
+      state.streamingState.currentChunk = null;
+    },
+
+    setStreamingError: (state, action: PayloadAction<{ messageId: string; error: string }>) => {
+      const { messageId, error } = action.payload;
+      const message = state.messages.find(m => m.id === messageId);
+      if (message) {
+        message.parts[0].text = `Error: ${error}`;
+      }
+      state.streamingState.isStreaming = false;
+      state.streamingState.error = error;
+    },
+
+    // UI state management
+    updateUIState: (state, action: PayloadAction<Partial<ChatUIState>>) => {
+      state.uiState = { ...state.uiState, ...action.payload };
+    },
+
+    setInputFocus: (state, action: PayloadAction<boolean>) => {
+      state.uiState.isInputFocused = action.payload;
+    },
+
+    setShowLogs: (state, action: PayloadAction<boolean>) => {
+      state.showLogs = action.payload;
+    },
+
+    setMarkdownPreview: (state, action: PayloadAction<boolean>) => {
+      state.uiState.showMarkdownPreview = action.payload;
+    },
+
+    setSelectedMessage: (state, action: PayloadAction<string | null>) => {
+      state.uiState.selectedMessageId = action.payload;
+    },
+
+    setEditingMessage: (state, action: PayloadAction<string | null>) => {
+      state.uiState.editingMessageId = action.payload;
+    },
+
+    toggleConversationHistory: (state) => {
+      state.uiState.showConversationHistory = !state.uiState.showConversationHistory;
+    },
+
+    // Conversation management
+    addConversation: (state, action: PayloadAction<Conversation>) => {
+      state.conversations.unshift(action.payload);
+    },
+
+    updateConversation: (state, action: PayloadAction<{ id: string; updates: Partial<Conversation> }>) => {
+      const index = state.conversations.findIndex(conv => conv.id === action.payload.id);
+      if (index !== -1) {
+        state.conversations[index] = { ...state.conversations[index], ...action.payload.updates };
+      }
+    },
+
+    deleteConversation: (state, action: PayloadAction<string>) => {
+      state.conversations = state.conversations.filter(conv => conv.id !== action.payload);
+      if (state.currentConversationId === action.payload) {
+        state.currentConversationId = null;
+        state.messages = [];
+      }
+    },
   },
 
   extraReducers: (builder) => {
     builder
-      .addCase(sendMessageWithLogging.pending, (state) => {
+      .addCase(sendMessageWithLogging.pending, (state, action) => {
         state.isLoading = true;
         state.error = null;
+
+        const userMessage: Message = {
+          id: `user_${Date.now()}`,
+          role: "user",
+          parts: [{ text: action.meta.arg.messageText }],
+          timestamp: Date.now(),
+          conversationId: state.currentConversationId || undefined,
+        };
+        state.messages.push(ensureMessageParts(userMessage));
       })
       .addCase(sendMessageWithLogging.fulfilled, (state, action) => {
         state.isLoading = false;
 
-        // Thêm tin nhắn bot vào danh sách
-        const botMessage: Message = {
-          id: action.payload.messageId || `msg_${Date.now()}`,
-          role: "model",
-          parts: [
-            { text: (action.payload.response as { answer: string }).answer },
-          ],
-          timestamp: Date.now(),
-          conversationId: action.payload.conversationId,
-          messageId: action.payload.messageId,
-        };
+        const lastMessage = state.messages[state.messages.length - 1];
 
-        state.messages.push(botMessage);
+        // Finalize the placeholder message
+        if (lastMessage && lastMessage.role === 'model') {
+          lastMessage.parts = [{ text: action.payload.response?.fullMessage || state.streamingState.accumulatedContent }];
+          lastMessage.id = action.payload.messageId || lastMessage.id;
+          lastMessage.conversationId = action.payload.conversationId;
+          lastMessage.messageId = action.payload.messageId;
+          lastMessage.timestamp = Date.now();
+        }
 
         // Cập nhật conversation ID
         if (action.payload.conversationId) {
           state.currentConversationId = action.payload.conversationId;
         }
 
-        // Clear input
+        // Clear input and reset streaming state
         state.input = "";
+        state.streamingState.accumulatedContent = "";
       })
       .addCase(sendMessageWithLogging.rejected, (state, action) => {
         state.isLoading = false;
@@ -229,7 +372,7 @@ const messageSlice = createSlice({
           timestamp: Date.now(),
         };
 
-        state.messages.push(errorMessage);
+        state.messages.push(ensureMessageParts(errorMessage));
       });
   },
 });
@@ -240,6 +383,20 @@ export const {
   clearMessages,
   setCurrentConversationId,
   setError,
+  startStreaming,
+  updateStreamingContent,
+  stopStreaming,
+  setStreamingError,
+  updateUIState,
+  setInputFocus,
+  setShowLogs,
+  setMarkdownPreview,
+  setSelectedMessage,
+  setEditingMessage,
+  toggleConversationHistory,
+  addConversation,
+  updateConversation,
+  deleteConversation,
 } = messageSlice.actions;
 
 export default messageSlice.reducer;

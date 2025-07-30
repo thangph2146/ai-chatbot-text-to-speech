@@ -1,3 +1,4 @@
+import logger from "@/app/lib/logger";
 import handleDifyChat from "@/service/dify/dify-service";
 import { NextApiRequest, NextApiResponse } from "next";
 import { Readable } from "stream";
@@ -20,6 +21,7 @@ async function adaptRequest(req: Request): Promise<NextApiRequest> {
 }
 
 export async function POST(req: Request) {
+  logger.info('Received POST request to /api/chat');
   const nextReq = await adaptRequest(req);
 
   // Create a mock response object that we can control

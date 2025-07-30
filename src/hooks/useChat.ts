@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import logger from '@/app/lib/logger';
 
 export interface Message {
   role: 'user' | 'model';
@@ -140,25 +141,66 @@ export const useChat = (
         throw new Error('Network response was not ok');
       }
 
-      const data = await response.json();
-      const botMessage: Message = { role: 'model', parts: [{ text: data.text }] };
-      
-      // Chỉ thêm vào messages nếu không bị hủy
-      if (!abortController.signal.aborted) {
-        if (!isCall) {
-          setMessages((prev) => [...prev, userMessage, botMessage]);
-        }
-        speak(data.text, undefined, isCall);
+      if (!response.body) {
+        logger.error('Response body is null');
+        return;
       }
-      
-      setInput('');
+
+      logger.info('Starting to process stream');
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let fullMessage = '';
+      let botMessage: Message = { role: 'model', parts: [{ text: '' }] };
+
+      // Add user message and an empty bot message to start
+      setMessages((prev) => [...prev, userMessage, botMessage]);
+
+      const processStream = async () => {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) {
+            logger.info('Stream finished');
+            break;
+          }
+
+          const chunk = decoder.decode(value, { stream: true });
+          const lines = chunk.split('\n').filter(line => line.trim() !== '');
+
+          for (const line of lines) {
+            if (line.startsWith('data:')) {
+              try {
+                const json = JSON.parse(line.substring(5));
+                if (json.event === 'message') {
+                  fullMessage += json.answer;
+                  setMessages((prev) => {
+                    const newMessages = [...prev];
+                    newMessages[newMessages.length - 1] = { role: 'model', parts: [{ text: fullMessage }] };
+                    return newMessages;
+                  });
+                } else if (json.event === 'message_end') {
+                  logger.info('Message end event received:', json);
+                }
+              } catch (e) {
+                logger.error('Could not parse stream line:', line, e);
+              }
+            }
+          }
+        }
+
+        if (!isCall) {
+          speak(fullMessage, undefined, isCall);
+        }
+        setInput('');
+      };
+
+      processStream();
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
         console.log('Request was aborted');
         return;
       }
       
-      console.error('Failed to send message:', error);
+      logger.error('Failed to send message:', error);
       if (!isCall && !abortController.signal.aborted) {
         const errorMessage: Message = { role: 'model', parts: [{ text: 'Xin lỗi, đã có lỗi xảy ra.' }] };
         setMessages((prev) => [...prev, errorMessage]);

@@ -98,55 +98,63 @@ export const callApiRoute = {
         }
 
         buffer += decoder.decode(value, { stream: true });
-        let boundary = buffer.indexOf('\n\n');
+        let boundary = buffer.indexOf('\n');
 
         while (boundary !== -1) {
           const eventString = buffer.substring(0, boundary).trim();
-          buffer = buffer.substring(boundary + 2);
+          buffer = buffer.substring(boundary + 1);
 
-          if (eventString.startsWith('data:')) {
-            const jsonData = eventString.substring(5).trim();
+          if (eventString.startsWith('data: ')) {
+            const jsonData = eventString.substring(6).trim();
             try {
               const parsedData = JSON.parse(jsonData);
-              // Adapt based on actual API response structure
-              const chunkText = parsedData.chunk || parsedData.answer || parsedData.text || '';
-              const currentConvId = parsedData.conversation_id;
-              const currentMessageId = parsedData.message_id;
-
-              if (chunkText) {
-                fullMessage += chunkText;
-                onMessage(chunkText);
+              if (parsedData.event === 'message') {
+                const chunkText = parsedData.answer || '';
+                if (chunkText) {
+                  fullMessage += chunkText;
+                  onMessage(chunkText);
+                }
               }
+              const currentConvId = parsedData.conversation_id;
+              const currentMessageId = parsedData.message_id || parsedData.id;
 
               if (currentConvId) latestConversationId = currentConvId;
               if (currentMessageId) messageId = currentMessageId;
 
+              if (parsedData.event === 'message_end') {
+                // Handle end if needed
+              }
             } catch (e) {
-              console.error('Error parsing SSE JSON:', e, 'Data:', jsonData);
+              console.error('Error parsing JSON line:', e, 'Data:', jsonData);
             }
           }
-          boundary = buffer.indexOf('\n\n');
+          boundary = buffer.indexOf('\n');
         }
       }
 
       // Process remaining buffer content (if any)
-      if (buffer.trim().startsWith('data:')) {
-        const jsonData = buffer.trim().substring(5).trim();
+      if (buffer.trim().startsWith('data: ')) {
+        const jsonData = buffer.trim().substring(6).trim();
         try {
           const parsedData = JSON.parse(jsonData);
-          const chunkText = parsedData.chunk || parsedData.answer || parsedData.text || '';
-          const currentConvId = parsedData.conversation_id;
-          const currentMessageId = parsedData.message_id;
-          
-          if (chunkText) {
-            fullMessage += chunkText;
-            onMessage(chunkText);
+          if (parsedData.event === 'message') {
+            const chunkText = parsedData.answer || '';
+            if (chunkText) {
+              fullMessage += chunkText;
+              onMessage(chunkText);
+            }
           }
-          
+          const currentConvId = parsedData.conversation_id;
+          const currentMessageId = parsedData.message_id || parsedData.id;
+
           if (currentConvId) latestConversationId = currentConvId;
           if (currentMessageId) messageId = currentMessageId;
+
+          if (parsedData.event === 'message_end') {
+            // Handle end if needed
+          }
         } catch (e) {
-          console.error('Error parsing final SSE JSON:', e, 'Data:', jsonData);
+          console.error('Error parsing final JSON line:', e, 'Data:', jsonData);
         }
       }
 

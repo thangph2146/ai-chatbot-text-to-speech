@@ -1,4 +1,5 @@
 // API endpoint để proxy request đến Dify API
+import logger from '@/app/lib/logger';
 import { NextApiRequest, NextApiResponse } from 'next';
 import fetch from 'node-fetch';
 import { Agent } from 'https';
@@ -11,7 +12,8 @@ export default async function handleDifyChat(req: NextApiRequest, res: NextApiRe
     const difyApiUrl = `${getDifyApiBaseUrl()}/v1/chat-messages`;
     const difyApiKey = getDifyApiKey();
 
-    console.log('Sending request to Dify API with key:', difyApiKey ? `${difyApiKey.substring(0, 8)}...` : 'không có');
+    logger.info('Dify API URL:', difyApiUrl);
+    logger.info('Dify API Key:', difyApiKey ? 'Loaded' : 'Not Loaded');
 
     if (!difyApiKey) {
       return res.status(500).json({ error: 'DIFY_API_KEY chưa được cấu hình' });
@@ -40,7 +42,7 @@ export default async function handleDifyChat(req: NextApiRequest, res: NextApiRe
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`Dify API error: ${response.status} - ${errorText}`);
+      logger.error(`Dify API error: ${response.status} - ${errorText}`);
 
       let userMessage = '';
       switch(response.status) {
@@ -83,7 +85,7 @@ export default async function handleDifyChat(req: NextApiRequest, res: NextApiRe
     // Stream response về client
     response.body.pipe(res);
    } catch (error: unknown) {
-     console.error('Lỗi khi gọi Dify API:', error);
+     logger.error('Lỗi khi gọi Dify API:', error);
      
      // Send a more specific error message based on the error type
      let userMessage = 'Vui lòng thử lại sau ít phút.';
