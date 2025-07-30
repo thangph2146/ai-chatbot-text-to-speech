@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import SpeechRecognition, { useSpeechRecognition } from 'react-speech-recognition';
 import { useChat } from '../hooks/useChat';
 import { useCall } from '../hooks/useCall';
@@ -13,18 +13,18 @@ export default function Home() {
   const { transcript, listening, browserSupportsSpeechRecognition, resetTranscript } = useSpeechRecognition();
   
   // Unified speech recognition handler
-  const handleSpeechRecognition = (listen: boolean) => {
+  const handleSpeechRecognition = useCallback((listen: boolean) => {
     if (listen) {
       SpeechRecognition.startListening({ continuous: true, language: 'vi-VN' });
     } else {
       SpeechRecognition.stopListening();
     }
-  };
+  }, []);
   
   // Regular chat handler
   const regularChatHandleListen = handleSpeechRecognition;
   
-  const { messages, input, loading: regularLoading, speaking: regularSpeaking, setInput, sendMessage } = useChat(regularChatHandleListen, resetTranscript);
+  const { messages, input, loading: regularLoading, speaking: regularSpeaking, setInput, sendMessage } = useChat(regularChatHandleListen);
   
   const {
     isCallActive,

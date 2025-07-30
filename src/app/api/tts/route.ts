@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
     const encodedText = Buffer.from(text).toString('base64');
     const command = `python "${scriptPath}" "${encodedText}" "${tempFilePath}"`;
 
-    const { stdout, stderr } = await execPromise(command);
+    const { stderr } = await execPromise(command);
 
     if (stderr) {
         console.error(`TTS script error: ${stderr}`);

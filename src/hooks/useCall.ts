@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useChat } from './useChat';
 
 export type CallState = 'idle' | 'listening' | 'processing' | 'speaking' | 'ended';
@@ -18,7 +18,7 @@ export const useCall = () => {
     if (listening) {
       // Nếu đang speaking, dừng audio trước khi bắt đầu listening
       if (callState === 'speaking') {
-        stopAudio();
+        // stopAudio(); // Removed this line
       }
       setCallState('listening');
     } else {
@@ -26,11 +26,11 @@ export const useCall = () => {
     }
   }, [isCallActive, callState]);
 
+  const { messages, input, loading, speaking, setInput, sendMessage, stopAudio } = useChat(handleListen);
+
   const resetTranscript = useCallback(() => {
     setLastTranscript('');
   }, []);
-
-  const { messages, input, loading, speaking, setInput, sendMessage, stopAudio } = useChat(handleListen, resetTranscript);
 
   const startCall = useCallback(() => {
     setIsCallActive(true);
@@ -107,8 +107,6 @@ export const useCall = () => {
       if (callState === 'speaking' || callState === 'processing') {
         setCallState('listening');
         setIsListening(true);
-      } else if (callState === 'idle') {
-        setCallState('idle');
       }
     }
   }, [isCallActive, loading, speaking, callState]);
@@ -154,7 +152,7 @@ export const useCall = () => {
 // Type definitions for window.SpeechRecognition
 declare global {
   interface Window {
-    SpeechRecognition: any;
-    webkitSpeechRecognition: any;
+    SpeechRecognition: SpeechRecognition;
+    webkitSpeechRecognition: SpeechRecognition;
   }
 }

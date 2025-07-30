@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 export interface Message {
   role: 'user' | 'model';
@@ -6,8 +6,7 @@ export interface Message {
 }
 
 export const useChat = (
-  onListen: (listening: boolean) => void,
-  resetTranscript: () => void
+  onListen: (listening: boolean) => void
 ) => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -16,73 +15,7 @@ export const useChat = (
   const [loading, setLoading] = useState(false);
   const [speaking, setSpeaking] = useState(false);
 
-    const sendMessage = async (messageText: string, isCall: boolean = false) => {
-    if (!messageText.trim()) return;
-
-    // Hủy request cũ nếu đang có
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-
-    // Dừng audio cũ nếu đang phát
-    stopAudio();
-    
-    // Dừng listening khi bắt đầu xử lý
-    onListen(false);
-
-    const userMessage: Message = { role: 'user', parts: [{ text: messageText }] };
-    setLoading(true);
-
-    // Tạo AbortController mới
-    const abortController = new AbortController();
-    abortControllerRef.current = abortController;
-
-    try {
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ history: messages, message: messageText }),
-        signal: abortController.signal,
-      });
-
-      if (!response.ok) {
-        throw new Error('Network response was not ok');
-      }
-
-      const data = await response.json();
-      const botMessage: Message = { role: 'model', parts: [{ text: data.text }] };
-      
-      // Chỉ thêm vào messages nếu không bị hủy
-      if (!abortController.signal.aborted) {
-        if (!isCall) {
-          setMessages((prev) => [...prev, userMessage, botMessage]);
-        }
-        speak(data.text, undefined, isCall);
-      }
-      
-      setInput('');
-    } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') {
-        console.log('Request was aborted');
-        return;
-      }
-      
-      console.error('Failed to send message:', error);
-      if (!isCall && !abortController.signal.aborted) {
-        const errorMessage: Message = { role: 'model', parts: [{ text: 'Xin lỗi, đã có lỗi xảy ra.' }] };
-        setMessages((prev) => [...prev, errorMessage]);
-      }
-    } finally {
-      if (!abortController.signal.aborted) {
-        setLoading(false);
-        abortControllerRef.current = null;
-      }
-    }
-  };
-
-  const stopAudio = () => {
+  const stopAudio = useCallback(() => {
     // Dừng audio
     if (audioRef.current) {
       audioRef.current.pause();
@@ -99,7 +32,7 @@ export const useChat = (
     // Reset trạng thái
     setSpeaking(false);
     setLoading(false);
-  };
+  }, [audioRef, abortControllerRef, setSpeaking, setLoading]);
 
   const speak = async (text: string, onEnd?: () => void, autoListen?: boolean) => {
     const cleanText = text.replace(/\*\*/g, ''); // Remove markdown bold
@@ -119,8 +52,8 @@ export const useChat = (
         try {
           const errorData = await response.json();
           console.error('TTS API error:', errorData.error);
-        } catch (e) {
-          console.error('TTS API error: Could not parse error response.');
+        } catch (error) {
+          console.error('TTS API error: Could not parse error response. Error:', error);
         }
 
         // Fallback to browser's synthesis if the API fails
@@ -172,11 +105,77 @@ export const useChat = (
     }
   };
 
+  const sendMessage = async (messageText: string, isCall: boolean = false) => {
+    if (!messageText.trim()) return;
+
+    // Hủy request cũ nếu đang có
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+
+    // Dừng audio cũ nếu đang phát
+    stopAudio();
+    
+    // Dừng listening khi bắt đầu xử lý
+    onListen(false);
+
+    const userMessage: Message = { role: 'user', parts: [{ text: messageText }] };  
+    setLoading(true);
+
+    // Tạo AbortController mới
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+
+    try {
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ history: messages, message: messageText }),
+        signal: abortController.signal,
+      });
+
+      if (!response.ok) {
+        throw new Error('Network response was not ok');
+      }
+
+      const data = await response.json();
+      const botMessage: Message = { role: 'model', parts: [{ text: data.text }] };
+      
+      // Chỉ thêm vào messages nếu không bị hủy
+      if (!abortController.signal.aborted) {
+        if (!isCall) {
+          setMessages((prev) => [...prev, userMessage, botMessage]);
+        }
+        speak(data.text, undefined, isCall);
+      }
+      
+      setInput('');
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.log('Request was aborted');
+        return;
+      }
+      
+      console.error('Failed to send message:', error);
+      if (!isCall && !abortController.signal.aborted) {
+        const errorMessage: Message = { role: 'model', parts: [{ text: 'Xin lỗi, đã có lỗi xảy ra.' }] };
+        setMessages((prev) => [...prev, errorMessage]);
+      }
+    } finally {
+      if (!abortController.signal.aborted) {
+        setLoading(false);
+        abortControllerRef.current = null;
+      }
+    }
+  };
+
   useEffect(() => {
     return () => {
       stopAudio();
     };
-  }, []);
+  }, [stopAudio]);
 
   return {
     messages,
