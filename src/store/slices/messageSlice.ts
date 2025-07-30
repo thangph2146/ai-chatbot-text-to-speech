@@ -333,40 +333,28 @@ const messageSlice = createSlice({
       .addCase(sendMessageWithLogging.pending, (state, action) => {
         state.isLoading = true;
         state.error = null;
-        // Không thêm user message ngay lập tức, chờ đến khi gửi thành công
-      })
-      .addCase(sendMessageWithLogging.fulfilled, (state, action) => {
-        state.isLoading = false;
-
-        // Thêm user message khi gửi thành công
+        
+        // Thêm user message ngay lập tức để đảm bảo thứ tự đúng
         const userMessage: Message = {
           id: `user_${Date.now()}`,
           role: "user",
           parts: [{ text: action.meta.arg.messageText }],
           timestamp: Date.now(),
-          conversationId: action.payload.conversationId || state.currentConversationId || undefined,
+          conversationId: state.currentConversationId || undefined,
         };
         state.messages.push(ensureMessageParts(userMessage));
+      })
+      .addCase(sendMessageWithLogging.fulfilled, (state, action) => {
+        state.isLoading = false;
 
-        // Tạo hoặc cập nhật bot message với nội dung từ streaming
+        // Chỉ cập nhật bot message đã có từ streaming, không tạo mới
         const existingBotMessage = state.messages.find(m => m.id === (action.payload.messageId || state.streamingState.currentMessageId));
         if (existingBotMessage) {
-          // Cập nhật message đã có
+          // Cập nhật message đã có với nội dung cuối cùng
           existingBotMessage.parts = [{ text: action.payload.response?.fullMessage || state.streamingState.accumulatedContent }];
           existingBotMessage.conversationId = action.payload.conversationId || state.currentConversationId || undefined;
           existingBotMessage.messageId = action.payload.messageId;
           existingBotMessage.timestamp = Date.now();
-        } else {
-          // Tạo bot message mới
-          const botMessage: Message = {
-            id: action.payload.messageId || state.streamingState.currentMessageId || `msg_${Date.now()}`,
-            role: "model",
-            parts: [{ text: action.payload.response?.fullMessage || state.streamingState.accumulatedContent }],
-            timestamp: Date.now(),
-            conversationId: action.payload.conversationId || state.currentConversationId || undefined,
-            messageId: action.payload.messageId,
-          };
-          state.messages.push(ensureMessageParts(botMessage));
         }
 
         // Cập nhật conversation ID

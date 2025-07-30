@@ -179,11 +179,6 @@ const ChatMessage = () => {
             const isStreamingMessage = streamingState.isStreaming && 
               streamingState.currentMessageId === message.id;
             
-            // Không hiển thị bot message bubble khi đang streaming và chưa có content
-            if (message.role === 'model' && isStreamingMessage && !streamingState.accumulatedContent) {
-              return null;
-            }
-            
             return (
               <MessageBubble
                 key={message.id}
@@ -206,7 +201,7 @@ const ChatMessage = () => {
           <div ref={messagesEndRef} />
 
           {loading && (
-            <LoadingMessage type="sending" message="Đang gửi tin nhắn..." />
+            <LoadingMessage type="sending" message="Đang phân tích câu hỏi..." />
           )}
 
           {error && (

@@ -225,8 +225,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                     </div>
                   </div>
                 ) : (
-                  /* Regular message content - chỉ hiển thị khi không streaming hoặc đã có content */
-                  message.parts && Array.isArray(message.parts) && message.parts.some(part => part.text?.trim()) ? message.parts.map((part, index) => (
+                  /* Regular message content */
+                  message.parts && Array.isArray(message.parts) && message.parts.length > 0 ? message.parts.map((part, index) => (
                     <div key={index} className="w-fit leading-relaxed">
                       {part.type === 'markdown' || isAssistant ? (
                         <MarkdownRenderer 
@@ -247,8 +247,12 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                       )}
                     </div>
                   )) : (
-                    /* Chỉ hiển thị "Không có nội dung" cho user messages hoặc system messages */
-                    !isAssistant && (
+                    /* Hiển thị placeholder cho tin nhắn trống */
+                    isAssistant ? (
+                      <div className="text-gray-400 italic font-medium">
+                        <span className="inline-block w-0.5 h-5 bg-blue-600 ml-1 animate-pulse" />
+                      </div>
+                    ) : (
                       <div className="text-gray-400 italic font-medium">
                         Không có nội dung
                       </div>
