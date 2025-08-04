@@ -115,9 +115,10 @@ export const useVoiceRecognition = ({
     };
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
-      let interimTranscript = '';
       let finalTranscript = '';
+      let interimTranscript = '';
 
+      // Process all results
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const result = event.results[i];
         const transcript = result[0].transcript.trim();
@@ -129,37 +130,28 @@ export const useVoiceRecognition = ({
         }
       }
 
-      setInterimTranscript(interimTranscript);
-      
-      if (finalTranscript) {
-        // Only update if we have new final content
-        const newFinalTranscript = finalTranscript.trim();
-        if (newFinalTranscript) {
-          setFinalTranscript(prev => {
-            // Avoid duplicates by checking if the new transcript is already included
-            if (prev && prev.includes(newFinalTranscript)) {
-              return prev;
-            }
-            const combined = prev ? `${prev} ${newFinalTranscript}` : newFinalTranscript;
-            return combined;
-          });
-          setTranscript(prev => {
-            if (prev && prev.includes(newFinalTranscript)) {
-              return prev;
-            }
-            const combined = prev ? `${prev} ${newFinalTranscript}` : newFinalTranscript;
-            return combined;
-          });
-          onResult?.(newFinalTranscript, true);
-        }
-      } else if (interimTranscript) {
-        // For interim results, combine with final transcript
+      // Update interim transcript for real-time display
+      if (interimTranscript) {
+        const trimmedInterim = interimTranscript.trim();
+        setInterimTranscript(trimmedInterim);
+        
+        // Combine with final transcript for display
         setTranscript(() => {
           const finalPart = finalTranscript;
-          const interim = interimTranscript.trim();
+          const interim = trimmedInterim;
           return finalPart ? `${finalPart} ${interim}` : interim;
         });
-        onResult?.(interimTranscript, false);
+        onResult?.(trimmedInterim, false);
+      }
+      
+      // Update final transcript
+      if (finalTranscript) {
+        const newFinalTranscript = finalTranscript.trim();
+        if (newFinalTranscript) {
+          setFinalTranscript(newFinalTranscript);
+          setTranscript(newFinalTranscript);
+          onResult?.(newFinalTranscript, true);
+        }
       }
     };
 
@@ -201,25 +193,53 @@ export const useVoiceRecognition = ({
 
   const startListening = useCallback(() => {
     const recognition = recognitionRef.current;
-    if (!recognition || isListeningRef.current) return;
+    if (!recognition) {
+      console.warn('Speech recognition not available');
+      return;
+    }
 
+    // Check if already listening
+    if (isListeningRef.current) {
+      console.log('Speech recognition already listening, skipping start');
+      return;
+    }
+
+    // Check if recognition is in a state that allows starting
     try {
       setError(null);
+      setIsListening(true);
+      isListeningRef.current = true;
       recognition.start();
+      console.log('Speech recognition started successfully');
     } catch (error) {
       console.error('Error starting speech recognition:', error);
+      setIsListening(false);
+      isListeningRef.current = false;
       setError('Không thể bắt đầu nhận diện giọng nói');
     }
   }, []);
 
   const stopListening = useCallback(() => {
     const recognition = recognitionRef.current;
-    if (!recognition || !isListeningRef.current) return;
+    if (!recognition) {
+      console.warn('Speech recognition not available');
+      return;
+    }
+
+    // Check if not listening
+    if (!isListeningRef.current) {
+      console.log('Speech recognition not listening, skipping stop');
+      return;
+    }
 
     try {
       recognition.stop();
+      console.log('Speech recognition stopped successfully');
     } catch (error) {
       console.error('Error stopping speech recognition:', error);
+    } finally {
+      setIsListening(false);
+      isListeningRef.current = false;
     }
   }, []);
 

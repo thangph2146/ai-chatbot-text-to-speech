@@ -75,7 +75,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     isSupported: isVoiceSupported,
     startRecording,
     stopRecording,
-    resetTranscript,
     resetError
   } = useVoiceInput({
     onTranscript: (transcript) => {

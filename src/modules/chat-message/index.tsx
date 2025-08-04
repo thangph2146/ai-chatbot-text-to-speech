@@ -20,7 +20,6 @@ const ChatMessage = () => {
     error,
     setInput,
     sendMessage,
-    clearMessages,
     showLogs,
     setShowLogs,
     conversations,
@@ -74,12 +73,6 @@ const ChatMessage = () => {
 
   const handleSendMessage = (message: string) => {
     sendMessage(message);
-  };
-
-  const handleClearMessages = () => {
-    if (window.confirm("Bạn có chắc chắn muốn xóa tất cả tin nhắn?")) {
-      clearMessages();
-    }
   };
 
   if (showLogs) {

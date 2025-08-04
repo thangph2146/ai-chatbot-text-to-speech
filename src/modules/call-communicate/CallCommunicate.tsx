@@ -2,8 +2,9 @@
 
 import React, { useCallback, useRef, useEffect } from 'react';
 import { cn } from '@/app/lib/utils';
-import { FaPhone, FaPhoneSlash, FaMicrophone, FaVolumeUp } from 'react-icons/fa';
+import { FaPhone, FaPhoneSlash, FaMicrophone, FaVolumeUp, FaCog } from 'react-icons/fa';
 import { SoundWave } from './components/SoundWave';
+import { CallMessageList } from './components/CallMessageList';
 import { useVoiceRecognition } from './hooks/useVoiceRecognition';
 import { useTextToSpeech } from './hooks/useTextToSpeech';
 import { useCallRedux } from './hooks/useCallRedux';
@@ -15,35 +16,47 @@ interface CallCommunicateProps {
   onCallStateChange?: (state: CallState) => void;
   conversationId?: string;
   userId?: string;
+  showMessages?: boolean;
+  showSettings?: boolean;
 }
 
 export const CallCommunicate: React.FC<CallCommunicateProps> = ({
   className,
   onCallStateChange,
   conversationId,
-  userId = 'user-001'
+  userId = 'user-001',
+  showMessages = true,
+  showSettings = true,
 }) => {
-  // Redux state and actions
+  // Redux state and actions với selectors tối ưu
   const {
-    isCallActive,
     callState,
-    currentConversationId,
-    currentTranscript,
+    isCallActive,
     isProcessing,
     error,
-    startCall: reduxStartCall,
-    endCall: reduxEndCall,
-    setCallState,
-    updateTranscript,
-    clearTranscript,
-    setConversationId,
-    setError,
-    clearError,
-    sendMessage,
+    currentTranscript,
+    currentConversationId,
+    ttsState,
+    uiState,
+    isSpeaking,
+    handleStartCall,
+    handleEndCall,
+    handleSetCallState,
+    handleUpdateTranscript,
+    handleClearTranscript,
+    handleSetConversationId,
+    handleSetError,
+    handleClearError,
+    handleSendMessage,
+    handleSetUIState,
+    handleCleanupAudio,
+    handleCleanupMessages,
+    handlePlayAudio,
   } = useCallRedux();
   
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  // Refs để tránh re-render không cần thiết
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isStartingListeningRef = useRef(false);
 
   // Custom hooks for voice recognition and TTS
   const {
@@ -64,26 +77,35 @@ export const CallCommunicate: React.FC<CallCommunicateProps> = ({
   const {
     speak,
     stop: stopSpeaking,
-    isSpeaking,
+    isSpeaking: isTTSSpeaking,
     isSupported: isTTSSupported
   } = useTextToSpeech();
 
   // Initialize conversation ID from props
   useEffect(() => {
     if (conversationId && conversationId !== currentConversationId) {
-      setConversationId(conversationId);
+      handleSetConversationId(conversationId);
     }
-  }, [conversationId, currentConversationId, setConversationId]);
+  }, [conversationId, currentConversationId, handleSetConversationId]);
 
   // Notify parent of call state changes
   useEffect(() => {
     onCallStateChange?.(callState);
   }, [callState, onCallStateChange]);
 
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      handleCleanupAudio();
+      handleCleanupMessages();
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, [handleCleanupAudio, handleCleanupMessages]);
 
-
-  // Send message using Redux
-  const handleSendMessage = useCallback(async (message: string) => {
+  // Send message using Redux với TTS integration
+  const handleSendMessageOptimized = useCallback(async (message: string) => {
     if (isProcessing || !message.trim()) return;
     
     const trimmedMessage = message.trim();
@@ -94,41 +116,94 @@ export const CallCommunicate: React.FC<CallCommunicateProps> = ({
       timeoutRef.current = null;
     }
     
+    // Stop listening and reset all transcripts
     stopListening();
     resetTranscript();
     resetFinalTranscript();
-    clearTranscript();
-    clearError();
+    handleClearTranscript();
+    handleClearError();
+
+    console.log('Sending message:', trimmedMessage);
 
     try {
-      // Send message through Redux
-      const result = await sendMessage(trimmedMessage, userId);
+      // Send message through Redux với TTS enabled
+      const result = await handleSendMessage({
+        message: trimmedMessage,
+        userId,
+        conversationId: currentConversationId,
+        enableTTS: true
+      });
       
-      // Start TTS with the processed response
+      // TTS sẽ được xử lý tự động trong Redux slice
       if (result.assistantMessage) {
-        setCallState('speaking');
+        handleSetCallState('speaking');
         
-        await speak(result.assistantMessage, {
-          onEnd: () => {
-            setCallState('listening');
-            startListening();
-          },
-          onError: (error) => {
-            console.error('TTS Error:', error);
-            setError('Lỗi chuyển đổi giọng nói');
-            setCallState('listening');
-            startListening();
+        // Fallback TTS nếu Redux TTS không hoạt động
+        if (!result.audioUrl) {
+          console.log('Using fallback TTS for:', result.assistantMessage.substring(0, 100) + '...');
+          
+          await speak(result.assistantMessage, {
+            onEnd: () => {
+              console.log('Fallback TTS ended, switching to listening mode');
+              handleSetCallState('listening');
+              if (!isStartingListeningRef.current) {
+                isStartingListeningRef.current = true;
+                startListening();
+                setTimeout(() => {
+                  isStartingListeningRef.current = false;
+                }, 500);
+              }
+            },
+            onError: (error) => {
+              console.error('Fallback TTS Error:', error);
+              handleSetError('Lỗi chuyển đổi giọng nói');
+              handleSetCallState('listening');
+              if (!isStartingListeningRef.current) {
+                isStartingListeningRef.current = true;
+                startListening();
+                setTimeout(() => {
+                  isStartingListeningRef.current = false;
+                }, 500);
+              }
+            }
+          });
+        } else {
+          console.log('Using Redux TTS audio URL');
+          // Redux TTS sẽ tự động phát audio với callback khi kết thúc
+          if (result.audioUrl) {
+            handlePlayAudio(result.audioUrl, () => {
+              console.log('Redux TTS ended, switching to listening mode');
+              handleSetCallState('listening');
+              if (!isStartingListeningRef.current) {
+                isStartingListeningRef.current = true;
+                startListening();
+                setTimeout(() => {
+                  isStartingListeningRef.current = false;
+                }, 500);
+              }
+            });
+          } else {
+            // Fallback nếu không có audio URL
+            console.log('No audio URL from Redux TTS, switching to listening mode');
+            handleSetCallState('listening');
+            if (!isStartingListeningRef.current) {
+              isStartingListeningRef.current = true;
+              startListening();
+              setTimeout(() => {
+                isStartingListeningRef.current = false;
+              }, 500);
+            }
           }
-        });
+        }
       }
     } catch (error) {
       console.error('Error in handleSendMessage:', error);
       const errorMessage = error instanceof Error ? error.message : 'Có lỗi xảy ra khi gửi tin nhắn';
-      setError(errorMessage);
-      setCallState('listening');
+      handleSetError(errorMessage);
+      handleSetCallState('listening');
       startListening();
     }
-  }, [isProcessing, stopListening, resetTranscript, resetFinalTranscript, clearTranscript, clearError, sendMessage, userId, setCallState, speak, startListening, setError]);
+  }, [isProcessing, stopListening, resetTranscript, resetFinalTranscript, handleClearTranscript, handleClearError, handleSendMessage, userId, currentConversationId, handleSetCallState, speak, startListening, handleSetError, handlePlayAudio]);
             
   // Handle voice recognition results - use transcript for display, finalTranscript for sending
   useEffect(() => {
@@ -137,9 +212,10 @@ export const CallCommunicate: React.FC<CallCommunicateProps> = ({
     // Update display transcript in Redux
     const trimmedTranscript = transcript.trim();
     if (trimmedTranscript && trimmedTranscript !== currentTranscript) {
-      updateTranscript(trimmedTranscript);
+      console.log('Updating transcript:', trimmedTranscript);
+      handleUpdateTranscript(trimmedTranscript);
     }
-  }, [transcript, isCallActive, currentTranscript, updateTranscript]);
+  }, [transcript, isCallActive, currentTranscript, handleUpdateTranscript]);
 
   // Handle final transcript for sending messages
   useEffect(() => {
@@ -153,12 +229,12 @@ export const CallCommunicate: React.FC<CallCommunicateProps> = ({
       clearTimeout(timeoutRef.current);
     }
 
-    // Set new timeout for 5 seconds of silence after final transcript
+    // Set new timeout for 2 seconds of silence after final transcript
     timeoutRef.current = setTimeout(() => {
       // Double check conditions before sending
       if (trimmedFinalTranscript && !isProcessing && callState === 'listening' && isCallActive) {
-        console.log('Sending message after 5s silence:', trimmedFinalTranscript);
-        handleSendMessage(trimmedFinalTranscript);
+        console.log('Sending message after 2s silence:', trimmedFinalTranscript);
+        handleSendMessageOptimized(trimmedFinalTranscript);
       }
     }, 2000);
 
@@ -167,14 +243,35 @@ export const CallCommunicate: React.FC<CallCommunicateProps> = ({
         clearTimeout(timeoutRef.current);
       }
     };
-  }, [finalTranscript, isCallActive, isProcessing, callState, handleSendMessage]);
+  }, [finalTranscript, isCallActive, isProcessing, callState, handleSendMessageOptimized]);
+
+  // Auto-switch to listening mode when audio ends
+  useEffect(() => {
+    if (callState === 'speaking' && !isSpeaking && !isTTSSpeaking) {
+      console.log('Audio ended, switching to listening mode');
+      handleSetCallState('listening');
+      
+      // Add delay to ensure audio state is fully updated
+      setTimeout(() => {
+        if (!isStartingListeningRef.current) {
+          isStartingListeningRef.current = true;
+          startListening();
+          // Reset flag after a short delay
+          setTimeout(() => {
+            isStartingListeningRef.current = false;
+          }, 500);
+        }
+      }, 100);
+    }
+  }, [callState, isSpeaking, isTTSSpeaking, handleSetCallState, startListening]);
 
   // Handle interruption when user starts speaking during AI response
   useEffect(() => {
     if (callState === 'speaking' && finalTranscript && finalTranscript.trim().length > 2) {
       console.log('User interruption detected:', finalTranscript);
       // Stop current TTS immediately
-      stop();
+      stopSpeaking();
+      handleCleanupAudio();
       // Clear any pending timeouts
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
@@ -183,67 +280,69 @@ export const CallCommunicate: React.FC<CallCommunicateProps> = ({
       // Reset transcripts and start listening for new question
       resetTranscript();
       resetFinalTranscript();
-      clearTranscript();
-      setCallState('listening');
+      handleClearTranscript();
+      handleSetCallState('listening');
       // Don't restart listening immediately, let the user finish speaking
       setTimeout(() => {
-        startListening();
+        if (!isStartingListeningRef.current) {
+          isStartingListeningRef.current = true;
+          startListening();
+          setTimeout(() => {
+            isStartingListeningRef.current = false;
+          }, 500);
+        }
       }, 500);
     }
-  }, [finalTranscript, callState, resetTranscript, resetFinalTranscript, clearTranscript, setCallState, startListening]);
+  }, [finalTranscript, callState, resetTranscript, resetFinalTranscript, handleClearTranscript, handleSetCallState, startListening, stopSpeaking, handleCleanupAudio]);
 
   // Start call
   const startCall = useCallback(async () => {
     if (!isVoiceSupported || !isTTSSupported) {
-      setError('Trình duyệt không hỗ trợ tính năng giọng nói');
+      handleSetError('Trình duyệt không hỗ trợ tính năng giọng nói');
       return;
     }
 
     try {
-      reduxStartCall();
-      clearError();
+      handleStartCall();
+      handleClearError();
       
       // Start with a greeting
       const greeting = 'Xin chào! Tôi có thể giúp gì cho bạn?';
-      setCallState('speaking');
+      handleSetCallState('speaking');
       
       await speak(greeting, {
         onEnd: () => {
-          setCallState('listening');
+          handleSetCallState('listening');
           startListening();
         },
         onError: (error) => {
           console.error('Greeting TTS Error:', error);
-          setError('Lỗi chuyển đổi giọng nói');
-          setCallState('listening');
+          handleSetError('Lỗi chuyển đổi giọng nói');
+          handleSetCallState('listening');
           startListening();
         }
       });
     } catch (error) {
       console.error('Error starting call:', error);
-      setError('Không thể bắt đầu cuộc gọi');
-      setCallState('idle');
+      handleSetError('Không thể bắt đầu cuộc gọi');
+      handleSetCallState('idle');
     }
-  }, [isVoiceSupported, isTTSSupported, reduxStartCall, clearError, setCallState, speak, startListening, setError]);
+  }, [isVoiceSupported, isTTSSupported, handleStartCall, handleClearError, handleSetCallState, speak, startListening, handleSetError]);
 
   // End call
   const endCall = useCallback(() => {
-    reduxEndCall();
+    handleEndCall();
     stopListening();
     stopSpeaking();
     resetTranscript();
-    clearTranscript();
-    clearError();
+    handleClearTranscript();
+    handleClearError();
+    handleCleanupAudio();
     
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
     }
-    
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current = null;
-    }
-  }, [reduxEndCall, stopListening, stopSpeaking, resetTranscript, clearTranscript, clearError]);
+  }, [handleEndCall, stopListening, stopSpeaking, resetTranscript, handleClearTranscript, handleClearError, handleCleanupAudio]);
 
   // Get status text based on current state
   const getStatusText = () => {
@@ -275,10 +374,19 @@ export const CallCommunicate: React.FC<CallCommunicateProps> = ({
     }
   };
 
+  // Toggle UI settings
+  const toggleSettings = useCallback(() => {
+    handleSetUIState({
+      showTranscript: !uiState.showTranscript,
+      showTimestamps: !uiState.showTimestamps,
+      compactMode: !uiState.compactMode,
+    });
+  }, [uiState, handleSetUIState]);
+
   return (
-    <div className={cn('flex flex-col items-center justify-center p-8 bg-gradient-to-br from-blue-50 to-indigo-100 rounded-2xl shadow-xl', className)}>
-      {/* Call Status */}
-      <div className="text-center mb-8">
+    <div className={cn('flex flex-col h-full', className)}>
+      {/* Header */}
+      <div className="text-center mb-6">
         <h2 className="text-2xl font-bold text-gray-800 mb-2">
           Giao tiếp bằng giọng nói
         </h2>
@@ -290,7 +398,7 @@ export const CallCommunicate: React.FC<CallCommunicateProps> = ({
         })}>
           {getStatusText()}
         </p>
-        {currentTranscript && (
+        {currentTranscript && uiState.showTranscript && (
           <p className="text-sm text-gray-500 mt-1 italic">
             &ldquo;{currentTranscript}&rdquo;
           </p>
@@ -300,9 +408,22 @@ export const CallCommunicate: React.FC<CallCommunicateProps> = ({
         )}
       </div>
 
+      {/* Messages List */}
+      {showMessages && (
+        <div className="flex-1 mb-6">
+          <CallMessageList
+            className="bg-white rounded-lg shadow-sm border"
+            maxHeight="300px"
+            showTimestamps={uiState.showTimestamps}
+            showStatus={true}
+            compactMode={uiState.compactMode}
+          />
+        </div>
+      )}
+
       {/* Sound Wave Visualization */}
       {isCallActive && (
-        <div className="mb-8">
+        <div className="mb-6">
           <SoundWave 
             type={getSoundWaveType()}
             isActive={callState !== 'idle'}
@@ -312,7 +433,7 @@ export const CallCommunicate: React.FC<CallCommunicateProps> = ({
       )}
 
       {/* Call Controls */}
-      <div className="flex items-center gap-6">
+      <div className="flex items-center justify-center gap-6 mb-6">
         {!isCallActive ? (
           <button
             onClick={startCall}
@@ -345,12 +466,23 @@ export const CallCommunicate: React.FC<CallCommunicateProps> = ({
             <div className={cn(
               'flex items-center justify-center w-12 h-12 rounded-full transition-all duration-200',
               {
-                'bg-purple-100 text-purple-600': isSpeaking,
-                'bg-gray-100 text-gray-400': !isSpeaking,
+                'bg-purple-100 text-purple-600': ttsState.isSpeaking,
+                'bg-gray-100 text-gray-400': !ttsState.isSpeaking,
               }
             )}>
               <FaVolumeUp className="w-5 h-5" />
             </div>
+
+            {/* Settings Button */}
+            {showSettings && (
+              <button
+                onClick={toggleSettings}
+                className="flex items-center justify-center w-12 h-12 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-full transition-all duration-200"
+                title="Cài đặt"
+              >
+                <FaCog className="w-5 h-5" />
+              </button>
+            )}
 
             {/* End Call Button */}
             <button
@@ -365,7 +497,7 @@ export const CallCommunicate: React.FC<CallCommunicateProps> = ({
       </div>
 
       {/* Support Status */}
-      <div className="mt-6 text-center text-sm text-gray-600">
+      <div className="text-center text-sm text-gray-600">
         <div className="flex items-center justify-center gap-4">
           <span className={cn('flex items-center gap-1', {
             'text-green-600': isVoiceSupported,

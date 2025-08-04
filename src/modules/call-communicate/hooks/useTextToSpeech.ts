@@ -198,26 +198,6 @@ export const useTextToSpeech = (): UseTextToSpeechReturn => {
     });
   }, [isSupported, voices]);
 
-  // Main speak function
-  const speak = useCallback(async (text: string, options?: SpeakOptions): Promise<void> => {
-    if (!text.trim()) {
-      return;
-    }
-
-    // Stop any ongoing speech
-    stop();
-
-    try {
-      // Try TTS API first
-      const audioUrl = await callTTSAPI(text);
-      await playAudio(audioUrl, options);
-    } catch {
-      console.warn('TTS API failed, falling back to browser TTS');
-      // Fallback to browser TTS
-      await speakWithBrowserTTS(text, options);
-    }
-  }, [callTTSAPI, playAudio, speakWithBrowserTTS]);
-
   // Stop speaking
   const stop = useCallback(() => {
     // Stop audio playback
@@ -237,6 +217,26 @@ export const useTextToSpeech = (): UseTextToSpeechReturn => {
     utteranceRef.current = null;
     currentOptionsRef.current = null;
   }, [isSupported]);
+
+  // Main speak function
+  const speak = useCallback(async (text: string, options?: SpeakOptions): Promise<void> => {
+    if (!text.trim()) {
+      return;
+    }
+
+    // Stop any ongoing speech
+    stop();
+
+    try {
+      // Try TTS API first
+      const audioUrl = await callTTSAPI(text);
+      await playAudio(audioUrl, options);
+    } catch {
+      console.warn('TTS API failed, falling back to browser TTS');
+      // Fallback to browser TTS
+      await speakWithBrowserTTS(text, options);
+    }
+  }, [callTTSAPI, playAudio, speakWithBrowserTTS, stop]);
 
   // Pause speaking
   const pause = useCallback(() => {
