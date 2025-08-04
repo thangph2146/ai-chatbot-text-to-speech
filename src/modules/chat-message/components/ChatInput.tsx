@@ -9,6 +9,7 @@ import {
   FaPaperclip,
 } from 'react-icons/fa';
 import { MarkdownRenderer } from './MarkdownRenderer';
+import { useVoiceInput } from '../hooks/useVoiceInput';
 
 interface ChatInputProps {
   value: string;
@@ -63,9 +64,30 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 }) => {
   const [showPreview, setShowPreview] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
-  const [isRecording, setIsRecording] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Voice input hook
+  const {
+    isRecording,
+    transcript,
+    error: voiceError,
+    isSupported: isVoiceSupported,
+    startRecording,
+    stopRecording,
+    resetTranscript,
+    resetError
+  } = useVoiceInput({
+    onTranscript: (transcript) => {
+      if (transcript.trim()) {
+        onChange(transcript);
+        onVoiceInput?.(transcript);
+      }
+    },
+    onError: (error) => {
+      console.error('Voice input error:', error);
+    }
+  });
 
   const finalConfig = { 
     ...defaultConfig, 
@@ -158,18 +180,26 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
   const toggleVoiceRecording = useCallback(() => {
     if (isRecording) {
-      // Stop recording
-      setIsRecording(false);
-      // Handle stop recording logic
-      // In a real implementation, you would stop the recording and get the transcript
-      const mockTranscript = "Voice input transcript";
-      onVoiceInput?.(mockTranscript);
+      stopRecording();
     } else {
-      // Start recording
-      setIsRecording(true);
-      // Handle start recording logic
+      startRecording();
     }
-  }, [isRecording, onVoiceInput]);
+  }, [isRecording, startRecording, stopRecording]);
+
+  // Show voice error if any
+  useEffect(() => {
+    if (voiceError) {
+      console.error('Voice recognition error:', voiceError);
+      // You can show a toast notification here if needed
+    }
+  }, [voiceError]);
+
+  // Update input with real-time transcript
+  useEffect(() => {
+    if (transcript && isRecording) {
+      onChange(transcript);
+    }
+  }, [transcript, isRecording, onChange]);
 
 
 
@@ -179,6 +209,34 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
   return (
     <div className={cn('border-t border-gray-200 bg-white shadow-md', className)}>
+      {/* Voice Error Notification */}
+      {voiceError && (
+        <div className="bg-red-50 border-l-4 border-red-400 p-3 mx-4 mt-2 rounded">
+          <div className="flex items-start">
+            <div className="flex-shrink-0">
+              <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="ml-3 flex-1">
+              <p className="text-sm text-red-700 font-medium">{voiceError}</p>
+              {voiceError.includes('từ chối') && (
+                <p className="text-xs text-red-600 mt-1">
+                  Hướng dẫn: Nhấp vào biểu tượng microphone trong thanh địa chỉ và cho phép truy cập microphone.
+                </p>
+              )}
+            </div>
+            <button
+               onClick={resetError}
+              className="ml-2 flex-shrink-0 text-red-400 hover:text-red-600"
+            >
+              <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
       {/* Markdown Preview */}
       {(showMarkdownPreview || showPreview) && finalConfig.enableMarkdownPreview && value.trim() && (
         <div className="border-b border-gray-200 p-4 bg-gray-50 max-h-60 overflow-y-auto">
@@ -285,21 +343,41 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               )}
 
               {/* Voice Input */}
-              {finalConfig.enableVoiceInput && (
+              {finalConfig.enableVoiceInput && isVoiceSupported && (
                 <button
                   type="button"
                   onClick={toggleVoiceRecording}
+                  disabled={disabled || loading}
                   className={cn(
                     'p-2 rounded-lg transition-all duration-200',
                     {
                       'text-red-700 bg-red-50 border border-red-700/30 animate-pulse': isRecording,
-                      'text-gray-500 hover:text-blue-700 hover:bg-blue-50': !isRecording,
+                      'text-gray-500 hover:text-blue-700 hover:bg-blue-50': !isRecording && !disabled && !loading,
+                      'text-gray-300 cursor-not-allowed': disabled || loading,
                     }
                   )}
-                  title={isRecording ? 'Dừng ghi âm' : 'Ghi âm'}
+                  title={
+                    disabled || loading
+                      ? 'Không thể ghi âm'
+                      : isRecording
+                      ? 'Dừng ghi âm'
+                      : 'Bắt đầu ghi âm'
+                  }
                 >
                   <FaMicrophone className="w-4 h-4" />
                 </button>
+              )}
+              
+              {/* Voice not supported message */}
+              {finalConfig.enableVoiceInput && !isVoiceSupported && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-2 mx-2">
+                  <div className="flex items-center text-xs text-yellow-700">
+                    <svg className="h-4 w-4 mr-1 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                    </svg>
+                    <span>Trình duyệt không hỗ trợ ghi âm. Hãy sử dụng Chrome, Edge hoặc Safari.</span>
+                  </div>
+                </div>
               )}
 
               {/* Send Button */}

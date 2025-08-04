@@ -247,7 +247,8 @@ export const unescapeHtml = (html: string): string => {
  * Convert line breaks to HTML br tags
  */
 export const nl2br = (text: string): string => {
-  return text.replace(/\n/g, '<br>');
+  // return text.replace(/\n/g, '<br>');
+  return text.replace(/\n/g, '');
 };
 
 /**

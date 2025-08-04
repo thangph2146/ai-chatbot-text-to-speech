@@ -134,7 +134,7 @@ const ChatMessage = () => {
       )}
       
       {/* Main Chat Area */}
-      <div className="flex flex-col flex-1 max-w-5xl mx-auto bg-white/90 backdrop-blur-sm shadow-2xl border border-blue-100">
+      <div className="flex flex-col flex-1 mx-auto bg-white/90 backdrop-blur-sm shadow-2xl border border-blue-100">
         {/* Header */}
         <div className="bg-gradient-to-r from-blue-700 to-blue-800 text-white p-6 flex justify-between items-center border-b border-blue-600">
           <div className="flex items-center gap-4">
