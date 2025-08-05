@@ -17,7 +17,7 @@ import {
   addConversation,
   updateConversation,
   deleteConversation,
-  setShowLogs,
+
 } from "@/store/slices/messageSlice";
 import { 
   ChatUIState, 
@@ -43,8 +43,7 @@ export const useChatMessage = () => {
     error, 
     currentConversationId, 
     streamingState, 
-    uiState,
-    showLogs
+    uiState
   } = useAppSelector((state) => state.message);
 
   const handleSetInput = useCallback(
@@ -123,9 +122,6 @@ export const useChatMessage = () => {
     dispatch(deleteConversation(id));
   }, [dispatch]);
 
-  const handleSetShowLogs = useCallback((show: boolean) => {
-    dispatch(setShowLogs(show));
-  }, [dispatch]);
 
   return {
     // Basic state
@@ -137,13 +133,12 @@ export const useChatMessage = () => {
     currentConversationId,
     streamingState,
     uiState,
-    showLogs,
-    
+
     // Basic functions
     setInput: handleSetInput,
     sendMessage,
     clearMessages: clearAllMessages,
-    setShowLogs: handleSetShowLogs,
+
     
     // Streaming functions
     startStreaming: handleStartStreaming,

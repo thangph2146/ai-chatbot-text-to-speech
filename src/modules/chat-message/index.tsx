@@ -2,17 +2,16 @@
 
 import React, { useEffect, useRef } from "react";
 import { useChatMessage } from "./hooks/useChatMessage";
-import LogViewer from "@/components/LogViewer";
+
 import { MessageBubble } from "./components/MessageBubble";
 import { ChatInput } from "./components/ChatInput";
 import { ConversationHistory } from "./components/ConversationHistory";
 import { TypingIndicator } from "./components/TypingIndicator";
 import { LoadingMessage } from "./components/LoadingMessage";
 import { FaComments, FaBars, FaTimes } from "react-icons/fa";
-import { useRouter } from "next/navigation";
+
 
 const ChatMessage = () => {
-  const router = useRouter();
   const {
     messages,
     input,
@@ -20,8 +19,7 @@ const ChatMessage = () => {
     error,
     setInput,
     sendMessage,
-    showLogs,
-    setShowLogs,
+
     conversations,
     streamingState,
     uiState,
@@ -75,24 +73,6 @@ const ChatMessage = () => {
     sendMessage(message);
   };
 
-  if (showLogs) {
-    return (
-      <div className="min-h-screen bg-gray-100 p-4">
-        <div className="max-w-7xl mx-auto">
-          <div className="mb-4">
-            <button
-              onClick={() => setShowLogs(false)}
-              className="flex items-center gap-2 bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
-            >
-              <FaComments /> Quay lại Chat
-            </button>
-          </div>
-          <LogViewer />
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="flex h-screen bg-gradient-to-br from-slate-50 to-blue-50">
       {/* Conversation History Sidebar */}
@@ -125,7 +105,7 @@ const ChatMessage = () => {
           />
         </div>
       )}
-      
+
       {/* Main Chat Area */}
       <div className="flex flex-col flex-1 mx-auto bg-white/90 backdrop-blur-sm shadow-2xl border border-blue-100">
         {/* Header */}
@@ -144,7 +124,7 @@ const ChatMessage = () => {
               </div>
               <div>
                 <h1 className="text-xl font-bold">AI Chat Assistant</h1>
-                <p className="text-blue-200 text-sm">Powered by Dify</p>
+                <p className="text-blue-200 text-sm">Chat với AI</p>
               </div>
             </div>
             {streamingState.isStreaming && (
@@ -154,24 +134,15 @@ const ChatMessage = () => {
               </div>
             )}
           </div>
-          <div className="flex gap-3">
-            <button
-              onClick={()=>{
-                router.push('/call-ai');
-              }}
-              className="bg-green-700 hover:bg-green-800 px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 hover:scale-105 shadow-lg"
-            >
-              Call AI
-            </button>
-          </div>
+
         </div>
 
         {/* Messages */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-gradient-to-b from-white/50 to-blue-50/30" ref={messagesContainerRef}>
           {messages.map((message) => {
-            const isStreamingMessage = streamingState.isStreaming && 
+            const isStreamingMessage = streamingState.isStreaming &&
               streamingState.currentMessageId === message.id;
-            
+
             return (
               <MessageBubble
                 key={message.id}
@@ -189,7 +160,7 @@ const ChatMessage = () => {
           {streamingState.isStreaming && (
             <TypingIndicator variant="receiving" />
           )}
-          
+
 
           <div ref={messagesEndRef} />
 

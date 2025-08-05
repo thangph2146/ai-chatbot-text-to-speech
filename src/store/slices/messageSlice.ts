@@ -1,13 +1,13 @@
 'use client';
 
 import { createSlice, createAsyncThunk, PayloadAction } from "@reduxjs/toolkit";
-import { callApiRoute } from "@/app/lib/axios/call-api";
-import { addLog } from "./chatLogSlice";
+import { DifyChatRequest } from "@/services/dify/dify-client";
 import { 
   Conversation, 
   StreamingState, 
   ChatUIState,
 } from "@/modules/chat-message/types";
+import { difyService } from "@/services/dify/dify-service";
 
 // Helper function to ensure message has valid parts
 const ensureMessageParts = (message: Message): Message => {
@@ -36,7 +36,7 @@ interface MessageState {
   currentConversationId: string | null;
   streamingState: StreamingState;
   uiState: Partial<ChatUIState>;
-  showLogs: boolean;
+
 }
 
 const initialState: MessageState = {
@@ -63,7 +63,7 @@ const initialState: MessageState = {
     editingMessageId: null,
     showConversationHistory: false
   },
-  showLogs: false
+
 };
 
 // Async thunk để gửi tin nhắn với logging
@@ -78,24 +78,7 @@ export const sendMessageWithLogging = createAsyncThunk(
       .toString(36)
       .substr(2, 9)}`;
 
-    // Log request
-    dispatch(
-      addLog({
-        id: requestId,
-        timestamp: startTime,
-        type: "request",
-        message: messageText,
-        userId,
-        conversationId: (getState() as { message: MessageState }).message.currentConversationId,
-        metadata: {
-          requestId,
-          userAgent:
-            typeof window !== "undefined"
-              ? window.navigator.userAgent
-              : "server",
-        },
-      })
-    );
+
 
     try {
       let fullResponse = "";
@@ -108,31 +91,33 @@ export const sendMessageWithLogging = createAsyncThunk(
       dispatch({ type: 'message/startStreaming', payload: { streamId, messageId: botMessageId } });
 
       await new Promise<void>((resolve, reject) => {
-        callApiRoute.postChatStream(
+        difyService.streamChatWithRetry(
           {
             inputs: {},
             query: messageText,
             response_mode: "streaming",
             conversation_id: (getState() as { message: MessageState }).message.currentConversationId || "",
             user: userId || "anonymous"
-          },
-          (message: string) => {
-            fullResponse += message;
-            dispatch({ type: 'message/updateStreamingContent', payload: { messageId: botMessageId, content: message } });
-          },
-          (result: { fullMessage: string; conversationId: string | null; messageId: string | null }) => {
-            fullResponse = result.fullMessage;
-            conversationId = result.conversationId || "";
-            messageId = result.messageId || botMessageId;
-            dispatch({ type: 'message/stopStreaming', payload: { messageId: botMessageId, finalContent: fullResponse } });
-            if (result.conversationId && result.conversationId !== (getState() as { message: MessageState }).message.currentConversationId) {
-              dispatch({ type: 'message/setCurrentConversationId', payload: result.conversationId });
+          } as DifyChatRequest,
+          {
+            onMessage: (message: string) => {
+              fullResponse += message;
+              dispatch({ type: 'message/updateStreamingContent', payload: { messageId: botMessageId, content: message } });
+            },
+            onComplete: (result: { fullMessage: string; conversationId: string | null; messageId: string | null }) => {
+              fullResponse = result.fullMessage;
+              conversationId = result.conversationId || "";
+              messageId = result.messageId || botMessageId;
+              dispatch({ type: 'message/stopStreaming', payload: { messageId: botMessageId, finalContent: fullResponse } });
+              if (result.conversationId && result.conversationId !== (getState() as { message: MessageState }).message.currentConversationId) {
+                dispatch({ type: 'message/setCurrentConversationId', payload: result.conversationId });
+              }
+              resolve();
+            },
+            onError: (error: Error) => {
+              dispatch({ type: 'message/setStreamingError', payload: { messageId: botMessageId, error: error.message || 'Streaming error' } });
+              reject(error);
             }
-            resolve();
-          },
-          (error: Error) => {
-            dispatch({ type: 'message/setStreamingError', payload: { messageId: botMessageId, error: error.message || 'Streaming error' } });
-            reject(error);
           }
         );
       });
@@ -140,24 +125,7 @@ export const sendMessageWithLogging = createAsyncThunk(
       const endTime = Date.now();
       const responseTime = endTime - startTime;
 
-      // Log successful response
-      dispatch(
-        addLog({
-          id: `res_${requestId}`,
-          timestamp: endTime,
-          type: "response",
-          message: fullResponse,
-          userId,
-          conversationId: conversationId || (getState() as { message: MessageState }).message.currentConversationId,
-          messageId: messageId || `msg_${Date.now()}`,
-          responseTime,
-          statusCode: 200,
-          metadata: {
-            requestId,
-            responseSize: fullResponse.length,
-          },
-        })
-      );
+
 
       return {
         response: { answer: fullResponse, fullMessage: fullResponse },
@@ -169,34 +137,7 @@ export const sendMessageWithLogging = createAsyncThunk(
       const endTime = Date.now();
       const responseTime = endTime - startTime;
 
-      // Log error
-      const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
-      const hasStatus = (err: unknown): err is { status: number } => {
-        return err !== null && typeof err === 'object' && 'status' in err;
-      };
-      const errorStatus = hasStatus(error) ? error.status : 500;
-      
-      dispatch(
-        addLog({
-          id: `err_${requestId}`,
-          timestamp: endTime,
-          type: "error",
-          message: errorMessage,
-          userId,
-          conversationId: (getState() as { message: MessageState }).message.currentConversationId,
-          responseTime,
-          statusCode: errorStatus,
-          errorDetails: JSON.stringify({
-            name: error instanceof Error ? error.name : 'Unknown',
-            message: errorMessage,
-            stack: error instanceof Error ? error.stack : undefined,
-          }),
-          metadata: {
-            requestId,
-            errorType: error?.constructor?.name || 'Unknown',
-          },
-        })
-      );
+
 
       throw error;
     }
@@ -289,9 +230,7 @@ const messageSlice = createSlice({
       state.uiState.isInputFocused = action.payload;
     },
 
-    setShowLogs: (state, action: PayloadAction<boolean>) => {
-      state.showLogs = action.payload;
-    },
+
 
     setMarkdownPreview: (state, action: PayloadAction<boolean>) => {
       state.uiState.showMarkdownPreview = action.payload;
@@ -401,7 +340,6 @@ export const {
   setStreamingError,
   updateUIState,
   setInputFocus,
-  setShowLogs,
   setMarkdownPreview,
   setSelectedMessage,
   setEditingMessage,
