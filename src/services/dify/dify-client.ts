@@ -1,8 +1,6 @@
 // ==================== DIFY CLIENT SERVICE ====================
 // Tách biệt logic xử lý Dify API để dễ quản lý và test
 
-import { DIFY_API_BASE_URL, DIFY_API_KEY } from '@/app/lib/axios/config';
-
 // ==================== TYPES ====================
 export interface DifyChatRequest {
   inputs?: Record<string, unknown>;
@@ -60,16 +58,6 @@ const getErrorMessage = (statusCode: number): string => {
   return errorMessages[statusCode] || 'Đã xảy ra lỗi khi xử lý yêu cầu của bạn. Vui lòng thử lại sau.';
 };
 
-// ==================== UTILITY FUNCTIONS ====================
-const validateDifyConfig = (): void => {
-  if (!DIFY_API_KEY) {
-    throw new DifyError('DIFY_API_KEY chưa được cấu hình', 500);
-  }
-  if (!DIFY_API_BASE_URL) {
-    throw new DifyError('DIFY_API_BASE_URL chưa được cấu hình', 500);
-  }
-};
-
 const parseStreamingData = (data: string): Record<string, unknown> | null => {
   if (!data.startsWith('data: ')) {
     return null;
@@ -88,197 +76,188 @@ const parseStreamingData = (data: string): Record<string, unknown> | null => {
   }
 };
 
-// ==================== DIFY CLIENT CLASS ====================
-export class DifyClient {
-  private baseUrl: string;
-  private apiKey: string;
-  private timeout: number;
+// ==================== DIFY FUNCTIONS ====================
+export const streamChat = async (
+  request: DifyChatRequest,
+  callbacks: DifyStreamingCallbacks
+): Promise<void> => {
+  const baseUrl = process.env.NEXT_PUBLIC_DIFY_API_BASE_URL || 'https://trolyai.hub.edu.vn';
+  const apiKey = process.env.NEXT_PUBLIC_DIFY_API_KEY || 'app-kyJ4IsXr0BvdaSuYBpdPISXH';
+  const timeout = 30000; // 30 seconds
 
-  constructor() {
-    this.baseUrl = DIFY_API_BASE_URL || '';
-    this.apiKey = DIFY_API_KEY || '';
-    this.timeout = 30000; // 30 seconds
-  }
+  let fullMessage = '';
+  let latestConversationId: string | null = null;
+  let messageId: string | null = null;
 
-  // ==================== STREAMING CHAT ====================
-  async streamChat(
-    request: DifyChatRequest,
-    callbacks: DifyStreamingCallbacks
-  ): Promise<void> {
-    let fullMessage = '';
-    let latestConversationId: string | null = null;
-    let messageId: string | null = null;
+  try {
+    // Call onStart callback if provided
+    callbacks.onStart?.();
 
-    try {
-      // Validate configuration
-      validateDifyConfig();
-      
-      // Call onStart callback if provided
-      callbacks.onStart?.();
+    const requestUrl = `${baseUrl}/v1/chat-messages`;
+    const headers = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+      'Accept': 'text/event-stream'
+    };
 
-      const response = await fetch(`${this.baseUrl}/v1/chat-messages`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.apiKey}`,
-          'Accept': 'text/event-stream'
-        },
-        body: JSON.stringify({
-          ...request,
-          response_mode: 'streaming'
-        }),
-        signal: AbortSignal.timeout(this.timeout)
-      });
+    console.log('=== DIFY API REQUEST ===');
+    console.log('URL:', requestUrl);
+    console.log('Headers:', headers);
+    console.log('Request body:', JSON.stringify(request, null, 2));
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        const userMessage = getErrorMessage(response.status);
-        throw new DifyError(
-          `API Error ${response.status}: ${errorText || response.statusText}`,
-          response.status,
-          userMessage
-        );
-      }
+    const response = await fetch(requestUrl, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        ...request,
+        response_mode: 'streaming'
+      }),
+      signal: AbortSignal.timeout(timeout)
+    });
 
-      const reader = response.body?.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
+    console.log('Response status:', response.status);
+    console.log('Response headers:', Object.fromEntries(response.headers.entries()));
 
-      if (!reader) {
-        throw new DifyError('Response body is not readable', 500);
-      }
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('API Error Response:', errorText);
+      const userMessage = getErrorMessage(response.status);
+      throw new DifyError(
+        `API Error ${response.status}: ${errorText || response.statusText}`,
+        response.status,
+        userMessage
+      );
+    }
 
-      // Process streaming response
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
+    const reader = response.body?.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
 
-        buffer += decoder.decode(value, { stream: true });
-        let boundary = buffer.indexOf('\n');
+    if (!reader) {
+      throw new DifyError('Response body is not readable', 500);
+    }
 
-        while (boundary !== -1) {
-          const eventString = buffer.substring(0, boundary).trim();
-          buffer = buffer.substring(boundary + 1);
+    // Process streaming response
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
 
-          if (eventString.startsWith('data: ')) {
-            const parsedData = parseStreamingData(eventString);
-            if (parsedData) {
-              if (parsedData.event === 'message') {
-                const chunkText = parsedData.answer as string || '';
-                if (chunkText) {
-                  fullMessage += chunkText;
-                  callbacks.onMessage(chunkText);
-                }
-              }
-              
-              // Update conversation and message IDs
-              if (parsedData.conversation_id) {
-                latestConversationId = parsedData.conversation_id as string;
-              }
-              if (parsedData.message_id || parsedData.id) {
-                messageId = (parsedData.message_id || parsedData.id) as string;
+      buffer += decoder.decode(value, { stream: true });
+      let boundary = buffer.indexOf('\n');
+
+      while (boundary !== -1) {
+        const eventString = buffer.substring(0, boundary).trim();
+        buffer = buffer.substring(boundary + 1);
+
+        if (eventString.startsWith('data: ')) {
+          const parsedData = parseStreamingData(eventString);
+          if (parsedData) {
+            if (parsedData.event === 'message') {
+              const chunkText = parsedData.answer as string || '';
+              if (chunkText) {
+                fullMessage += chunkText;
+                callbacks.onMessage(chunkText);
               }
             }
-          }
-          boundary = buffer.indexOf('\n');
-        }
-      }
-
-      // Process remaining buffer
-      if (buffer.trim().startsWith('data: ')) {
-        const parsedData = parseStreamingData(buffer.trim());
-        if (parsedData) {
-          if (parsedData.event === 'message') {
-            const chunkText = parsedData.answer as string || '';
-            if (chunkText) {
-              fullMessage += chunkText;
-              callbacks.onMessage(chunkText);
+            
+            // Update conversation and message IDs
+            if (parsedData.conversation_id) {
+              latestConversationId = parsedData.conversation_id as string;
+            }
+            if (parsedData.message_id || parsedData.id) {
+              messageId = (parsedData.message_id || parsedData.id) as string;
             }
           }
-          
-          if (parsedData.conversation_id) {
-            latestConversationId = parsedData.conversation_id as string;
-          }
-          if (parsedData.message_id || parsedData.id) {
-            messageId = (parsedData.message_id || parsedData.id) as string;
+        }
+        boundary = buffer.indexOf('\n');
+      }
+    }
+
+    // Process remaining buffer
+    if (buffer.trim().startsWith('data: ')) {
+      const parsedData = parseStreamingData(buffer.trim());
+      if (parsedData) {
+        if (parsedData.event === 'message') {
+          const chunkText = parsedData.answer as string || '';
+          if (chunkText) {
+            fullMessage += chunkText;
+            callbacks.onMessage(chunkText);
           }
         }
-      }
-
-      // Call completion callback
-      callbacks.onComplete({
-        fullMessage,
-        conversationId: latestConversationId,
-        messageId
-      });
-
-    } catch (error) {
-      console.error('Error in Dify streaming chat:', error);
-      
-      if (error instanceof DifyError) {
-        callbacks.onError(error);
-      } else {
-        const genericError = new DifyError(
-          error instanceof Error ? error.message : 'Unknown error occurred',
-          500
-        );
-        callbacks.onError(genericError);
+        
+        if (parsedData.conversation_id) {
+          latestConversationId = parsedData.conversation_id as string;
+        }
+        if (parsedData.message_id || parsedData.id) {
+          messageId = (parsedData.message_id || parsedData.id) as string;
+        }
       }
     }
+
+    // Call completion callback
+    callbacks.onComplete({
+      fullMessage,
+      conversationId: latestConversationId,
+      messageId
+    });
+
+  } catch (error) {
+    console.error('Error in streaming chat:', error);
+    callbacks.onError(error as Error);
   }
+};
 
-  // ==================== BLOCKING CHAT ====================
-  async chat(request: DifyChatRequest): Promise<DifyChatResponse> {
-    try {
-      validateDifyConfig();
+export const chat = async (request: DifyChatRequest): Promise<DifyChatResponse> => {
+  const baseUrl = process.env.NEXT_PUBLIC_DIFY_API_BASE_URL || 'https://trolyai.hub.edu.vn';
+  const apiKey = process.env.NEXT_PUBLIC_DIFY_API_KEY || 'app-kyJ4IsXr0BvdaSuYBpdPISXH';
+  const timeout = 30000; // 30 seconds
 
-      const response = await fetch(`${this.baseUrl}/v1/chat-messages`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.apiKey}`,
-        },
-        body: JSON.stringify({
-          ...request,
-          response_mode: 'blocking'
-        }),
-        signal: AbortSignal.timeout(this.timeout)
-      });
+  try {
+    const requestUrl = `${baseUrl}/v1/chat-messages`;
+    const headers = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    };
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        const userMessage = getErrorMessage(response.status);
-        throw new DifyError(
-          `API Error ${response.status}: ${errorText || response.statusText}`,
-          response.status,
-          userMessage
-        );
-      }
+    console.log('=== DIFY API REQUEST (BLOCKING) ===');
+    console.log('URL:', requestUrl);
+    console.log('Headers:', headers);
+    console.log('Request body:', JSON.stringify(request, null, 2));
 
-      const data = await response.json() as Record<string, unknown>;
-      
-      return {
-        fullMessage: data.answer as string || '',
-        conversationId: data.conversation_id as string || null,
-        messageId: data.message_id as string || null
-      };
+    const response = await fetch(requestUrl, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        ...request,
+        response_mode: 'blocking'
+      }),
+      signal: AbortSignal.timeout(timeout)
+    });
 
-    } catch (error) {
-      console.error('Error in Dify chat:', error);
-      
-      if (error instanceof DifyError) {
-        throw error;
-      } else {
-        throw new DifyError(
-          error instanceof Error ? error.message : 'Unknown error occurred',
-          500
-        );
-      }
+    console.log('Response status:', response.status);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('API Error Response:', errorText);
+      const userMessage = getErrorMessage(response.status);
+      throw new DifyError(
+        `API Error ${response.status}: ${errorText || response.statusText}`,
+        response.status,
+        userMessage
+      );
     }
+
+    const data = await response.json();
+    console.log('Response data:', data);
+
+    return {
+      fullMessage: data.answer || '',
+      conversationId: data.conversation_id || null,
+      messageId: data.message_id || data.id || null
+    };
+
+  } catch (error) {
+    console.error('Error in chat:', error);
+    throw error;
   }
-
-
-}
-
-// ==================== SINGLETON INSTANCE ====================
-export const difyClient = new DifyClient(); 
+}; 
