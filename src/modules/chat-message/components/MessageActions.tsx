@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { MessageAction } from '../types';
-import { cn } from '@/app/lib/utils';
+import { cn } from '@/lib/utils';
 import {
   FaEdit,
   FaTrash,

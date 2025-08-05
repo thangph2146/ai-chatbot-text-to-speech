@@ -1,7 +1,8 @@
 // ==================== DIFY SERVICE LAYER ====================
 // Xử lý retry logic, rate limiting và error handling cho Dify API
 
-import { streamChat, chat, DifyChatRequest, DifyChatResponse, DifyStreamingCallbacks, DifyError } from './dify-client';
+import { postDifyChatStream, postDifyChat, DifyChatRequest, DifyChatResponse, DifyStreamingCallbacks } from '@/lib/axios/call-api-dify';
+import { DifyError } from './dify-client';
 
 // ==================== TYPES ====================
 export interface RetryConfig {
@@ -135,8 +136,8 @@ export class DifyService {
         // Record request for rate limiting
         this.rateLimiter.recordRequest();
 
-        // Make the request
-        await streamChat(request, callbacks);
+        // Make the request using call-api-dify.ts
+        await postDifyChatStream(request, callbacks);
         return; // Success, exit retry loop
 
       } catch (error) {
@@ -176,8 +177,8 @@ export class DifyService {
         // Record request for rate limiting
         this.rateLimiter.recordRequest();
 
-        // Make the request
-        return await chat(request);
+        // Make the request using call-api-dify.ts
+        return await postDifyChat(request);
 
       } catch (error) {
         lastError = error as Error;
@@ -238,4 +239,4 @@ const defaultConfig: DifyServiceConfig = {
 export const difyService = new DifyService(defaultConfig);
 
 // Re-export types for convenience
-export type { DifyChatRequest, DifyChatResponse, DifyStreamingCallbacks } from './dify-client'; 
+export type { DifyChatRequest, DifyChatResponse, DifyStreamingCallbacks } from '@/lib/axios/call-api-dify'; 

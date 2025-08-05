@@ -1,7 +1,7 @@
 'use client';
 
 import { createSlice, createAsyncThunk, PayloadAction } from "@reduxjs/toolkit";
-import { DifyChatRequest } from "@/services/dify/dify-client";
+import { DifyChatRequest } from "@/app/lib/axios/call-api-dify";
 import { 
   Conversation, 
   StreamingState, 

@@ -1,8 +1,8 @@
 'use client';
 
 import axios from 'axios';
-import { API_ENDPOINTS } from './end-point';
-import { streamChat, DifyChatRequest, DifyStreamingCallbacks } from '../../../services/dify/dify-client';
+import { DifyService } from '../../../services/dify/dify-service';
+import { DifyChatRequest, DifyStreamingCallbacks } from './call-api-dify';
 
 // ==================== CONFIGURATION ====================
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3000';
@@ -11,7 +11,6 @@ const api = axios.create({
   baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
-    'Authorization': `Bearer ${process.env.NEXT_PUBLIC_DIFY_API_KEY || 'app-kyJ4IsXr0BvdaSuYBpdPISXH'}`
   },
   timeout: 30000, // 30 seconds timeout
 });
@@ -61,6 +60,20 @@ export interface StreamingCallbacks {
   onStart?: () => void;
 }
 
+// ==================== DIFY SERVICE INSTANCE ====================
+const difyService = new DifyService({
+  retry: {
+    maxRetries: 3,
+    baseDelay: 1000,
+    maxDelay: 10000,
+    backoffMultiplier: 2
+  },
+  rateLimit: {
+    maxRequestsPerMinute: 60,
+    maxRequestsPerHour: 1000
+  }
+});
+
 // ==================== STREAMING CHAT FUNCTION ====================
 export const postChatStream = async (
   data: ChatRequest,
@@ -76,7 +89,8 @@ export const postChatStream = async (
       query: data.query,
       response_mode: data.response_mode,
       conversation_id: data.conversation_id || '',
-      user: data.user || 'default-user'
+      user: data.user || 'default-user',
+      files: data.files
     };
 
     const difyCallbacks: DifyStreamingCallbacks = {
@@ -86,8 +100,8 @@ export const postChatStream = async (
       onStart: callbacks.onStart
     };
 
-    // Use streamChat function directly
-    await streamChat(difyRequest, difyCallbacks);
+    // Use DifyService with retry logic
+    await difyService.streamChatWithRetry(difyRequest, difyCallbacks);
 
   } catch (error) {
     console.error('Error in streaming chat:', error);

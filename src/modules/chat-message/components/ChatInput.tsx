@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { InputAreaConfig } from '../types/ui';
-import { cn } from '@/app/lib/utils';
+import { cn } from '@/lib/utils';
 import {
   FaPaperPlane,
   FaEye,

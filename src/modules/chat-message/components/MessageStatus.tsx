@@ -1,6 +1,6 @@
 import React from 'react';
 import { MessageStatus as MessageStatusType } from '../types';
-import { cn } from '@/app/lib/utils';
+import { cn } from '@/lib/utils';
 import {
   FaClock,
   FaPaperPlane,

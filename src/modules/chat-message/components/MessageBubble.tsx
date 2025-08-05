@@ -4,7 +4,7 @@ import { MarkdownRenderer } from './MarkdownRenderer';
 import { MessageActions } from './MessageActions';
 import { MessageStatus } from './MessageStatus';
 import { formatTimestamp } from '../utils/dateUtils';
-import { cn } from '@/app/lib/utils';
+import { cn } from '@/lib/utils';
 import '../styles/animations.css';
 
 interface MessageBubbleProps {

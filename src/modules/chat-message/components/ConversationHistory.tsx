@@ -2,7 +2,7 @@
 
 import React, { useState, useCallback, useMemo } from 'react';
 import { Conversation, HistorySort, HistorySortBy, HistorySortOrder } from '../types';
-import { cn } from '@/app/lib/utils';
+import { cn } from '@/lib/utils';
 import {
   FaSearch,
   FaFilter,

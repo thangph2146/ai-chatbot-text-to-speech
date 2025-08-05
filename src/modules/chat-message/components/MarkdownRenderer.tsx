@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { MarkdownOptions, CodeBlock, MarkdownTheme } from '../types/markdown';
-import { cn } from '@/app/lib/utils';
+import { cn } from '@/lib/utils';
 import { FaCopy, FaCheck, FaCode, FaExpand } from 'react-icons/fa';
 
 interface MarkdownRendererProps {

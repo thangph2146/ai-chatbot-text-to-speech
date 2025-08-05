@@ -81,8 +81,8 @@ export const streamChat = async (
   request: DifyChatRequest,
   callbacks: DifyStreamingCallbacks
 ): Promise<void> => {
-  const baseUrl = process.env.NEXT_PUBLIC_DIFY_API_BASE_URL || 'https://trolyai.hub.edu.vn';
-  const apiKey = process.env.NEXT_PUBLIC_DIFY_API_KEY || 'app-kyJ4IsXr0BvdaSuYBpdPISXH';
+  const baseUrl = process.env.NEXT_PUBLIC_DIFY_API_BASE_URL || '';
+  const apiKey = process.env.NEXT_PUBLIC_DIFY_API_KEY || '';
   const timeout = 30000; // 30 seconds
 
   let fullMessage = '';
@@ -93,17 +93,12 @@ export const streamChat = async (
     // Call onStart callback if provided
     callbacks.onStart?.();
 
-    const requestUrl = `${baseUrl}/v1/chat-messages`;
+    const requestUrl = `${process.env.NEXT_PUBLIC_DIFY_API_BASE_URL}/v1/chat-messages`;
     const headers = {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${apiKey}`,
       'Accept': 'text/event-stream'
     };
-
-    console.log('=== DIFY API REQUEST ===');
-    console.log('URL:', requestUrl);
-    console.log('Headers:', headers);
-    console.log('Request body:', JSON.stringify(request, null, 2));
 
     const response = await fetch(requestUrl, {
       method: 'POST',

@@ -6,7 +6,7 @@ Tạo file `.env.local` trong thư mục gốc của project với nội dung:
 
 ```env
 # Dify API Configuration
-NEXT_PUBLIC_DIFY_API_BASE_URL=https://trolyai.hub.edu.vn
+NEXT_PUBLIC_DIFY_API_BASE_URL=http://trolyai.hub.edu.vn
 NEXT_PUBLIC_DIFY_API_KEY=your_actual_api_key_here
 
 # Other API Configuration
@@ -47,21 +47,44 @@ Nếu gặp lỗi 401 hoặc 404, kiểm tra:
 
 ## Cấu trúc code mới
 
-Code hiện tại sử dụng function trực tiếp:
+Code hiện tại sử dụng axios trong `call-api-dify.ts` với DifyService:
 
 ```typescript
-// Trong call-api.ts
-import { streamChat, DifyChatRequest, DifyStreamingCallbacks } from '../../../services/dify/dify-client';
+// Trong call-api-dify.ts
+import axios from 'axios';
 
-// Sử dụng function trực tiếp
-await streamChat(difyRequest, difyCallbacks);
+const difyApi = axios.create({
+  baseURL: DIFY_API_BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${DIFY_API_KEY}`,
+  },
+  timeout: 30000
+});
+
+// Trong dify-service.ts
+import { postDifyChatStream, postDifyChat } from '../../app/lib/axios/call-api-dify';
+
+// Sử dụng DifyService với retry logic
+await difyService.streamChatWithRetry(request, callbacks);
 ```
 
-Functions sẽ tự động:
-- Đọc environment variables trực tiếp
-- Validate cấu hình
-- Debug logging
-- Error handling
+DifyService sẽ tự động:
+- Xử lý retry logic với exponential backoff
+- Rate limiting (60 requests/minute, 1000 requests/hour)
+- Error handling với response status
+- Streaming response processing
+
+## Test API
+
+Sử dụng file test để kiểm tra:
+
+```typescript
+import { testDifyServiceIntegration } from './test-integration';
+
+// Test tích hợp
+await testDifyServiceIntegration();
+```
 
 ## Lỗi thường gặp
 
@@ -85,7 +108,7 @@ Functions sẽ tự động:
 
 **Giải pháp:**
 1. Kiểm tra `NEXT_PUBLIC_DIFY_API_BASE_URL` có đúng không
-2. Đảm bảo sử dụng function trực tiếp
+2. Đảm bảo sử dụng axios instance đúng cách
 3. Kiểm tra Console log để xem URL thực tế
 
 ### Lỗi "DIFY_API_KEY chưa được cấu hình"
@@ -99,19 +122,26 @@ Functions sẽ tự động:
 2. Kiểm tra format: `NEXT_PUBLIC_DIFY_API_KEY=your_key`
 3. Restart server sau khi thay đổi
 
-## Test API
+## Test API với curl
 
 Sử dụng curl để test API trước khi dùng trong code:
 
 ```bash
-curl -X POST 'https://trolyai.hub.edu.vn/v1/chat-messages' \
+curl -X POST 'http://trolyai.hub.edu.vn/v1/chat-messages' \
 --header 'Authorization: Bearer YOUR_API_KEY' \
 --header 'Content-Type: application/json' \
 --data-raw '{
     "inputs": {},
-    "query": "Hello",
+    "query": "What are the specs of the iPhone 13 Pro Max?",
     "response_mode": "streaming",
     "conversation_id": "",
-    "user": "test-user"
+    "user": "abc-123",
+    "files": [
+      {
+        "type": "image",
+        "transfer_method": "remote_url",
+        "url": "https://cloud.dify.ai/logo/logo-site.png"
+      }
+    ]
 }'
 ``` 
